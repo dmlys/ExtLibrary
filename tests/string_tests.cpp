@@ -1,32 +1,20 @@
 #include <boost/test/unit_test.hpp>
-#include <string>
-#include <string_view>
+#include <boost/mp11.hpp>
+#include <boost/mp11/mpl.hpp>
 
-template <class String>
-struct string_test_case
-{
-	typedef String string_type;
+#include <ext/strings/cow_string.hpp>
+#include <ext/strings/compact_string.hpp>
 
-public:
-	static void assign_test();
-	static void append_test();
-	static void concat_tests();
-	static void insert_tests();
-	static void replace_tests();
-	static void erase_tests();
 
-	static void string_view_tests();
+using test_list = boost::mp11::mp_list<
+	ext::cow_string,
+	ext::compact_string
+>;
 
-	static void find_tests();
-	static void rfind_tests();
-	static void find_first_of_tests();
-	static void find_last_of_tests();
 
-	static void run_all_test();
-};
+BOOST_AUTO_TEST_SUITE(string_tests)
 
-template <class String>
-void string_test_case<String>::assign_test()
+BOOST_AUTO_TEST_CASE_TEMPLATE(assign_tests, string_type, test_list)
 {
 	string_type source;
 	string_type str;
@@ -54,12 +42,11 @@ void string_test_case<String>::assign_test()
 	BOOST_CHECK_EQUAL(str, "text");
 }
 
-template <class String>
-void string_test_case<String>::append_test()
+BOOST_AUTO_TEST_CASE_TEMPLATE(append_tests, string_type, test_list)
 {
 	string_type source = "some text for append tests";
 	string_type str;
-	
+
 	str.append(source);
 	BOOST_CHECK_EQUAL(str, source);
 
@@ -84,13 +71,12 @@ void string_test_case<String>::append_test()
 	str.assign("some text 123");
 	str.append(str, 4, 5);
 	BOOST_CHECK_EQUAL(str, "some text 123 text");
-	
+
 	str.append(str.data() + 10, 8);
 	BOOST_CHECK_EQUAL(str, "some text 123 text123 text");
 }
 
-template <class String>
-void string_test_case<String>::concat_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(concat_tests, string_type, test_list)
 {
 	string_type str = "first";
 	string_type res = "prefix " +
@@ -111,8 +97,7 @@ void string_test_case<String>::concat_tests()
 	BOOST_CHECK_EQUAL(str, res);
 }
 
-template <class String>
-void string_test_case<String>::insert_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(insert_tests, string_type, test_list)
 {
 	string_type str = "some text";
 	string_type toins = "instxt";
@@ -124,8 +109,7 @@ void string_test_case<String>::insert_tests()
 	BOOST_CHECK_EQUAL(str, "some instxt text instxt");
 }
 
-template <class String>
-void string_test_case<String>::replace_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(replace_tests, string_type, test_list)
 {
 	string_type str = "this is bad something";
 	std::string vbad = "bad";        // std::string for different iterator type,
@@ -133,12 +117,12 @@ void string_test_case<String>::replace_tests()
 
 	auto pos = str.find(vbad.c_str());
 
-	auto * ptr = str.data();
-	str.replace(ptr + pos, ptr + pos + vbad.size(), vgood.begin(), vgood.end());
+	auto it = str.begin();
+	str.replace(it + pos, it + pos + vbad.size(), vgood.begin(), vgood.end());
 	BOOST_CHECK_EQUAL(str, "this is verygood something");
 
-	ptr = str.data();
-	str.replace(ptr + pos, ptr + pos + vgood.size(), vbad.begin(), vbad.end());
+	it = str.begin();
+	str.replace(it + pos, it + pos + vgood.size(), vbad.begin(), vbad.end());
 	BOOST_CHECK_EQUAL(str, "this is bad something");
 
 	str = "this is bad something";
@@ -207,21 +191,17 @@ void string_test_case<String>::replace_tests()
 	str = "abcdef";
 	str.replace(str.begin() + 0, str.begin() + 4, str.begin() + 0, str.begin() + 5);
 	BOOST_CHECK_EQUAL(str, "abcdeef");
-
 }
 
-template <class String>
-void string_test_case<String>::erase_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(erase_tests, string_type, test_list)
 {
 	string_type str = "some text";
-	
+
 	str.erase(0, 5);
 	BOOST_CHECK_EQUAL(str, "text");
 }
 
-
-template <class String>
-void string_test_case<String>::string_view_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(string_view_tests, string_type, test_list)
 {
 	using namespace std::literals;
 
@@ -238,8 +218,7 @@ void string_test_case<String>::string_view_tests()
 	BOOST_CHECK_EQUAL(str, "hello");
 }
 
-template <class String>
-void string_test_case<String>::find_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(find_tests, string_type, test_list)
 {
 	string_type s = "some";
 
@@ -254,8 +233,7 @@ void string_test_case<String>::find_tests()
 	BOOST_CHECK_EQUAL(pos, 0);
 }
 
-template <class String>
-void string_test_case<String>::rfind_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(rfind_tests, string_type, test_list)
 {
 	string_type s = "some";
 
@@ -270,8 +248,7 @@ void string_test_case<String>::rfind_tests()
 	BOOST_CHECK_EQUAL(pos, 0);
 }
 
-template <class String>
-void string_test_case<String>::find_first_of_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(find_first_of_tests, string_type, test_list)
 {
 	string_type s = "some";
 	size_t pos;
@@ -292,8 +269,7 @@ void string_test_case<String>::find_first_of_tests()
 	BOOST_CHECK_EQUAL(pos, 2);
 }
 
-template <class String>
-void string_test_case<String>::find_last_of_tests()
+BOOST_AUTO_TEST_CASE_TEMPLATE(find_last_of_tests, string_type, test_list)
 {
 	string_type s = "some";
 	size_t pos;
@@ -314,21 +290,5 @@ void string_test_case<String>::find_last_of_tests()
 	BOOST_CHECK_EQUAL(pos, 3);
 }
 
-template <class String>
-void string_test_case<String>::run_all_test()
-{
-	assign_test();
-	append_test();
-	concat_tests();
-	insert_tests();
-	erase_tests();
-	replace_tests();
-	string_view_tests();
 
-	find_tests();
-	rfind_tests();
-	find_first_of_tests();
-	find_last_of_tests();
-}
-
-
+BOOST_AUTO_TEST_SUITE_END()

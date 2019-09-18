@@ -17,6 +17,7 @@
 
 #include <ext/type_traits.hpp>
 #include <boost/config.hpp>
+#include <ext/container/container_iterator.hpp>
 
 namespace ext
 {
@@ -72,11 +73,17 @@ namespace ext
 		typedef       value_type &    reference;
 		typedef const value_type &    const_reference;
 		
-		typedef pointer         iterator;
-		typedef const_pointer   const_iterator;
+		//typedef pointer         iterator;
+		//typedef const_pointer   const_iterator;
+		//
+		//typedef std::reverse_iterator<iterator>        reverse_iterator;
+		//typedef std::reverse_iterator<const_iterator>  const_reverse_iterator;
 
-		typedef std::reverse_iterator<iterator>        reverse_iterator;
-		typedef std::reverse_iterator<const_iterator>  const_reverse_iterator;
+		using iterator       = ext::container::container_iterator<pointer,       self_type>;
+		using const_iterator = ext::container::container_iterator<const_pointer, self_type>;
+
+		using reverse_iterator       = std::reverse_iterator<iterator>;
+		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
 		typedef char_traits traits_type;
 		typedef std::basic_string_view<value_type, traits_type> string_view_type;
@@ -135,13 +142,13 @@ namespace ext
 		size_type copy(value_type * dest, size_type count, size_type pos = 0) const;
 
 	public: // iterators [done]
-		iterator begin()             noexcept   { return data(); }
-		iterator end()               noexcept   { return data_end(); }
-		const_iterator begin() const noexcept   { return data(); }
-		const_iterator end()   const noexcept	{ return data_end(); }
+		iterator begin()             noexcept   { return iterator(data()); }
+		iterator end()               noexcept   { return iterator(data_end()); }
+		const_iterator begin() const noexcept   { return const_iterator(data()); }
+		const_iterator end()   const noexcept	{ return const_iterator(data_end()); }
 
-		const_iterator cbegin() const noexcept  { return data(); }
-		const_iterator cend()   const noexcept  { return data_end(); }
+		const_iterator cbegin() const noexcept  { return const_iterator(data()); }
+		const_iterator cend()   const noexcept  { return const_iterator(data_end()); }
 
 		reverse_iterator rbegin()             noexcept     { return reverse_iterator(data_end()); }
 		reverse_iterator rend()               noexcept     { return reverse_iterator(data()); }
@@ -163,7 +170,7 @@ namespace ext
 		self_type & assign(const value_type * str);
 		self_type & assign(std::initializer_list<value_type> ilist);
 		
-		self_type & assign(const_iterator first, const_iterator last) { return assign(first, last - first); }
+		self_type & assign(const_iterator first, const_iterator last) { return assign(first.base(), last - first); }
 		self_type & assign(iterator first, iterator last) { return assign(const_iterator(first), const_iterator(last)); }
 
 		template <class InputIterator>
@@ -251,6 +258,9 @@ namespace ext
 		self_type & replace(size_type pos, size_type count, const value_type * str);
 		self_type & replace(size_type pos, size_type count, const value_type * str, size_type count2);
 		self_type & replace(size_type pos, size_type count, size_type count2, value_type ch);
+
+		self_type & replace(const_iterator first, const_iterator last, const_iterator r_first, const_iterator r_last) { return replace(first, last, r_first.base(), r_last.base()); }
+		self_type & replace(const_iterator first, const_iterator last,       iterator r_first,       iterator r_last) { return replace(first, last, r_first.base(), r_last.base()); }
 
 		template <class InputIterator>
 		self_type & replace(const_iterator first, const_iterator last, InputIterator r_first, InputIterator r_last);
@@ -902,8 +912,8 @@ namespace ext
 	basic_string_facade<storage, char_traits> &
 		basic_string_facade<storage, char_traits>::replace(const_iterator first, const_iterator last, const self_type & str)
 	{
-		auto * ptr = cbegin();
-		return replace(first - ptr, last - first, str);
+		auto it = cbegin();
+		return replace(first - it, last - first, str);
 	}
 
 	template <class storage, class char_traits>
@@ -924,8 +934,8 @@ namespace ext
 	basic_string_facade<storage, char_traits> &
 		basic_string_facade<storage, char_traits>::replace(const_iterator first, const_iterator last, size_type count, value_type ch)
 	{
-		auto * ptr = cbegin();
-		return replace(first - ptr, last - first, count, ch);
+		auto it = cbegin();
+		return replace(first - it , last - first, count, ch);
 	}
 
 	template <class storage, class char_traits>
@@ -941,8 +951,8 @@ namespace ext
 			const_iterator first, const_iterator last,
 			const value_type * str_first, const value_type * str_last)
 	{
-		auto * ptr = cbegin();
-		return replace(first - ptr, last - first, str_first, str_last - str_first);
+		auto it = cbegin();
+		return replace(first - it, last - first, str_first, str_last - str_first);
 	}
 
 	template <class storage, class char_traits>
@@ -951,8 +961,8 @@ namespace ext
 			const_iterator first, const_iterator last,
 			value_type * str_first, value_type * str_last)
 	{
-		auto * ptr = cbegin();
-		return replace(first - ptr, last - first, str_first, str_last - str_first);
+		auto it = cbegin();
+		return replace(first - it, last - first, str_first, str_last - str_first);
 	}
 
 	template <class storage, class char_traits>
@@ -1181,31 +1191,34 @@ namespace ext
 		value_type * last;
 		std::tie(first, last) = this->range();
 
-		assert(first <= o_first);
-		assert(o_last <= last);
+		const value_type * replace_first = o_first.base();
+		const value_type * replace_last  = o_last.base();
+
+		assert(first <= replace_first);
+		assert(replace_last <= last);
 
 		//size_type o_pos = first - o_first;
-		size_type o_count = o_last - o_first;
+		size_type o_count = replace_last - replace_first;
 		size_type r_count = std::distance(r_first, r_last);
-		size_type tail_count = last - o_last;
+		size_type tail_count = last - replace_last;
 
 		if (o_count >= r_count)
 		{	// shrink
 			size_type diff = o_count - r_count;
-			first = const_cast<value_type *>(o_first);
+			first = const_cast<value_type *>(replace_first);
 
 			for (; r_first < r_last; ++r_first, ++first)
 				traits_type::assign(*first, *r_first);
 
 			// move trailing
-			traits_type::move(first, o_last, tail_count);
+			traits_type::move(first, replace_last, tail_count);
 			this->set_eos(last - diff);
 			this->shrink_by(diff);
 			return *this;
 		}
 		else
 		{	// grow
-			size_type pos = o_first - first;
+			size_type pos = replace_first - first;
 			size_type diff = r_count - o_count;
 			std::tie(first, std::ignore) = this->grow_by(diff);
 			first += pos;
