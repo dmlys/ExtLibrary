@@ -28,6 +28,13 @@ namespace library_logger
 	inline logger * get_logger(logger * lg) { return lg; }
 	inline logger * get_logger(logger & lg) { return &lg; }
 	inline logger * get_logger(logger && lg) = delete;
+
+	//inline const logger * get_logger(const logger * lg) { return lg; }
+	//inline const logger * get_logger(const logger & lg) { return &lg; }
+	//inline const logger * get_logger(const logger && lg) = delete;
+
+	// smart pointer overload
+	template <class Pointer> inline auto get_logger(Pointer & ptr) { return ptr.get(); }
 }}
 
 #if defined(_MSC_VER)
