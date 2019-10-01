@@ -1,5 +1,4 @@
-﻿#include <ext/threaded_scheduler.hpp>
-#include <boost/thread/reverse_lock.hpp>
+#include <ext/threaded_scheduler.hpp>
 
 namespace ext
 {
