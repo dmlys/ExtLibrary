@@ -37,7 +37,7 @@ namespace ext::library_logger
 
 	inline bool log4cplus_logger::do_is_enabled_for(unsigned log_level) const
 	{
-		return m_logger->isEnabledFor(log4cplus::log_level(log_level));
+		return log_level != Disabled and m_logger->isEnabledFor(log4cplus::log_level(log_level));
 	}
 
 	inline void log4cplus_logger::do_log(unsigned log_level, const std::string & log_str, const char * source_file, int source_line)
@@ -62,7 +62,7 @@ namespace ext::library_logger
 
 	inline bool sequenced_log4cplus_logger::do_is_enabled_for(unsigned log_level) const
 	{
-		return m_logger->isEnabledFor(log4cplus::log_level(log_level));
+		return log_level != Disabled and m_logger->isEnabledFor(log4cplus::log_level(log_level));
 	}
 
 	inline void sequenced_log4cplus_logger::do_log(unsigned log_level, const std::string & log_str, const char * source_file, int source_line)

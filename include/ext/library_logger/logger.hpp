@@ -3,11 +3,29 @@
 #include <memory>
 #include <utility>
 #include <string>
+#include <string_view>
 #include <iostream>
 #include <sstream>
+#include <ext/strings/aci_string.hpp>
 
 namespace ext::library_logger
 {
+	/// известные уровни логирования
+	constexpr unsigned Fatal = 0;
+	constexpr unsigned Error = 1;
+	constexpr unsigned Warn  = 2;
+	constexpr unsigned Info  = 3;
+	constexpr unsigned Debug = 4;
+	constexpr unsigned Trace = 5;
+
+	/// explicitly disabled, not matter what configuration states
+	constexpr unsigned Disabled = -1; // MAX_UINT
+
+	/// returns string representation of log_level
+	std::string_view log_level_string(unsigned log_level);
+	/// parses word as log_level, if parsing fails - returns Disabled
+	unsigned parse_log_level(std::string_view word);
+
 	/// rationale:
 	/// некоторым библиотекам требуется возможность логирования.
 	///   * они могут использовать стороннюю библиотеку,
@@ -107,15 +125,6 @@ namespace ext::library_logger
 		virtual ~logger() = default;
 	};
 
-	/// известные уровни логирования
-	constexpr unsigned Fatal = 0;
-	constexpr unsigned Error = 1;
-	constexpr unsigned Warn = 2;
-	constexpr unsigned Info = 3;
-	constexpr unsigned Debug = 4;
-	constexpr unsigned Trace = 5;
-
-
 	/************************************************************************/
 	/*   RAII safe record class.                                            */
 	/*   представляет запись в которую можно добавлять данные логирования   */
@@ -201,6 +210,36 @@ namespace ext::library_logger
 		return lg.open_record(log_level, source_file, source_line);
 	}
 
+	/************************************************************************/
+	/*                        log_level stuff                               */
+	/************************************************************************/
+	inline std::string_view log_level_string(unsigned log_level)
+	{
+		switch (log_level)
+		{
+		    case Trace:    return "Trace";
+		    case Debug:    return "Debug";
+		    case Info:     return "Info";
+		    case Warn:     return "Warn";
+		    case Error:    return "Error";
+		    case Fatal:    return "Fatal";
+
+		    case Disabled: return "Disabled";
+		    default:       return "Unknown";
+		}
+	}
+
+	inline unsigned parse_log_level(std::string_view word)
+	{
+		ext::aci_string_view aci_word(word.data(), word.length());
+
+		if      (aci_word == "fatal") return Fatal;
+		else if (aci_word == "error") return Error;
+		else if (aci_word == "warn" ) return Warn;
+		else if (aci_word == "debug") return Debug;
+		else if (aci_word == "trace") return Trace;
+		else                          return Disabled;
+	}
 
 
 	/************************************************************************/
@@ -263,7 +302,7 @@ namespace ext::library_logger
 	/// упрощение интерфейса к более простому
 	/// is_enabled_for(log_level), log(log_level, logStr)
 	/// например таким интерфейсом обладает log4cplus
-
+	///
 	/// наследник должен реализовать is_enabled_for/log методы
 	class simple_logger : public logger
 	{
