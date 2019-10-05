@@ -5,10 +5,6 @@
 #include <codecvt>
 #include <fstream>
 
-#include "test_files.h"
-#include <ext/codecvt_conv.hpp>
-#include <ext/FileSystemUtils.hpp>
-
 #include <boost/test/unit_test.hpp>
 #include <boost/range.hpp>
 #include <boost/range/istream_range.hpp>
@@ -16,6 +12,10 @@
 #include <boost/range/algorithm.hpp>
 #include <boost/range/algorithm_ext.hpp>
 #include <boost/locale.hpp>
+
+#include <ext/codecvt_conv.hpp>
+#include <ext/filesystem_utils.hpp>
+#include "test_files.h"
 
 namespace
 {
@@ -43,11 +43,11 @@ namespace
 
 		void ReadFiles()
 		{
-			//std::cout << boost::filesystem::current_path() << std::endl;
+			//std::cout << std::filesystem::current_path() << std::endl;
 			LoadTestFile("CodecvtConvTestFiles/Martin_ru_utf8.txt", martin_ru_utf8, std::ios::binary);
 			LoadTestFile("CodecvtConvTestFiles/Martin_ru_cp1251.txt", martin_ru_cp1251, std::ios::binary);
 
-			auto file = boost::filesystem::absolute("CodecvtConvTestFiles/Martin_ru_utf16LE.txt", test_files_location);
+			auto file = test_files_location / "CodecvtConvTestFiles/Martin_ru_utf16LE.txt";
 			std::wifstream ifs(file.c_str(), std::ios::binary);
 			ifs >> std::noskipws;
 			auto cvt = new std::codecvt_utf16<wchar_t, 0x10FFFF, std::codecvt_mode(/*std::little_endian &*/ std::consume_header)>;
