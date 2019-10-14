@@ -3,32 +3,56 @@
 #include <string>
 #include <algorithm>
 #include <ext/range.hpp>
+#include <ext/config.hpp>
 #include <ext/type_traits.hpp>
 #include <ext/iostreams/utility.hpp>
-
-#include <boost/archive/iterators/transform_width.hpp>
-#include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/binary_from_base64.hpp>
 
 
 namespace ext
 {
 	namespace base64
 	{
+		namespace encoding_tables
+		{
+			static_assert(CHAR_BIT == 8, "byte is not octet");
+
+			/// table used for hex encoding: 0 - '0' ... 10 - 'A' ... 15 - 'F'
+			extern const char base64_encoding_array[64];
+			extern const char base64_decoding_array[256];
+			constexpr char padding = '=';
+		}
+
 		constexpr unsigned OutputGroupSize = 4;
 		constexpr unsigned InputGroupSize = 3;
 
-		template <class Iterator>
-		using encode_itearator =
-			boost::archive::iterators::base64_from_binary<
-				boost::archive::iterators::transform_width<Iterator, 6, 8>
-			>;
+		/// base exception for all base64
+		class base64_exception : public std::runtime_error
+		{
+		public:
+			base64_exception(const char * msg) : std::runtime_error(msg) {}
+		};
 
-		template <class Iterator>
-		using decode_itearator =
-			boost::archive::iterators::transform_width<
-				boost::archive::iterators::binary_from_base64<Iterator>, 8, 6
-			>;
+		/// input has non valid hex char
+		class non_base64_char : public base64_exception
+		{
+		public:
+			non_base64_char() : base64_exception("ext::base64::decode: bad char in base64 group") {}
+		};
+
+		/// input has not enough input
+		class not_enough_input : public base64_exception
+		{
+		public:
+			not_enough_input() : base64_exception("ext::base64::decode: bad base64 group") {}
+		};
+
+		inline char decode_char(char ch)
+		{
+			ch = encoding_tables::base64_decoding_array[static_cast<unsigned char>(ch)];
+			if (ch >= 0) return ch;
+
+			throw non_base64_char();
+		}
 
 		constexpr std::size_t encode_estimation(std::size_t size)
 		{
@@ -39,6 +63,21 @@ namespace ext
 		{
 			return (size + OutputGroupSize - 1) / OutputGroupSize * InputGroupSize;
 		}
+
+		template <class Iterator>
+		Iterator rskip_padding(Iterator first, Iterator last)
+		{
+			// skip = symbols
+			while (last != first)
+			{
+				if (*--last == encoding_tables::padding)
+					continue;
+
+				++last; break;
+			}
+
+			return last;
+		}
 	}
 
 	template <class RandomAccessIterator, class OutputIterator>
@@ -46,13 +85,67 @@ namespace ext
 	encode_base64(RandomAccessIterator first, RandomAccessIterator last, OutputIterator out)
 	{
 		using namespace base64;
+		using namespace encoding_tables;
+		constexpr unsigned mask = 0x3Fu;
+		std::size_t groups = (last - first) / InputGroupSize;
+		std::uint32_t val;
 
-		typedef encode_itearator<RandomAccessIterator> base64_iterator;
-		auto count = InputGroupSize - (last - first) % InputGroupSize;
-		count %= InputGroupSize;
-		
-		out = std::copy(base64_iterator(first), base64_iterator(last), out);
-		out = std::fill_n(out, count, '=');
+		auto blast = first + InputGroupSize * groups;
+		for (; first != blast; first += InputGroupSize)
+		{
+			// /    << 16      /      << 8     /               /
+			// +---------------+---------------+---------------+
+			// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+			// +---------------+---------------+---------------+
+			// /    >> 18  /   >> 12   /    >> 6   /           /
+
+			val = static_cast<std::uint32_t>(static_cast<unsigned char>(first[0])) << 16u
+				| static_cast<std::uint32_t>(static_cast<unsigned char>(first[1])) << 8u
+			    | static_cast<std::uint32_t>(static_cast<unsigned char>(first[2]));
+
+			*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 18u       ) ];
+			*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 12u & mask) ];
+			*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 6u  & mask) ];
+			*out++ = base64_encoding_array[ static_cast<unsigned char>(val        & mask) ];
+		}
+
+		if (first != last)
+		{
+			switch (last - first)
+			{
+				case 1:
+					// /    lowest     /  pseudo byte  /
+					// +---------------+---------------+
+					// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+					// +---------------+---------------+
+					// /    >> 2   /<<4        /
+
+					val = static_cast<unsigned char>(first[0]);
+					*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 2u)        ];
+					*out++ = base64_encoding_array[ static_cast<unsigned char>(val << 4u & mask) ];
+					*out++ = padding;
+					*out++ = padding;
+					break;
+
+				case 2:
+					// /     << 8      /    lowest     /     pseudo    /
+					// +---------------+---------------+---------------+
+					// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+					// +---------------+---------------+---------------+
+					// /    >> 10  /    >> 4   /    << 2   /           /
+					val = static_cast<std::uint32_t>(static_cast<unsigned char>(first[0])) << 8
+						| static_cast<std::uint32_t>(static_cast<unsigned char>(first[1]));
+
+					*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 10u       ) ];
+					*out++ = base64_encoding_array[ static_cast<unsigned char>(val >> 4u  & mask) ];
+					*out++ = base64_encoding_array[ static_cast<unsigned char>(val << 2u  & mask) ];
+					*out++ = padding;
+					break;
+
+				default: EXT_UNREACHABLE();
+			}
+		}
+
 		return out;
 	}
 
@@ -61,17 +154,13 @@ namespace ext
 	std::enable_if_t<ext::is_container_v<OutputContainer>/*, OutputContainer &*/>
 	encode_base64(RandomAccessIterator first, RandomAccessIterator last, OutputContainer & out)
 	{
-		typedef base64::encode_itearator<RandomAccessIterator> base64_itearator;
-
 		auto out_size = base64::encode_estimation(last - first);
 		auto old_size = out.size();
 		out.resize(old_size + out_size);
 
 		auto out_beg = boost::begin(out) + old_size;
 		auto out_end = boost::end(out);
-
-		auto stopped = std::copy(base64_itearator(first), base64_itearator(last), out_beg);
-		std::fill(stopped, out_end, '=');
+		out_end = encode_base64(first, last, out_beg);
 	}
 
 	/// encodes text from range into container out, the last group is padded with '='
@@ -128,23 +217,91 @@ namespace ext
 	std::enable_if_t<ext::is_iterator_v<OutputIterator>, OutputIterator>
 	decode_base64(RandomAccessIterator first, RandomAccessIterator last, OutputIterator out)
 	{
-		typedef base64::decode_itearator<RandomAccessIterator> base64_iterator;
-		return std::copy(base64_iterator(first), base64_iterator(last), out);
+		using namespace base64;
+		using namespace encoding_tables;
+		constexpr unsigned mask = 0xFFu;
+
+		last = rskip_padding(first, last);
+		std::size_t groups = (last - first) / OutputGroupSize;
+		auto blast = first + groups * OutputGroupSize;
+		std::uint32_t val;
+
+		for (; first != blast; first += OutputGroupSize)
+		{
+			// /    << 18  /   << 12   /    << 6   /           /
+			// +---------------+---------------+---------------+
+			// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+			// +---------------+---------------+---------------+
+			// /    >> 16      /      >> 8     /               /
+
+			val = static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[0]))) << 18u
+				| static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[1]))) << 12u
+			    | static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[2]))) << 6u
+				| static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[3])));
+
+			*out++ = static_cast<unsigned char>(val >> 16u & mask);
+			*out++ = static_cast<unsigned char>(val >> 8u  & mask);
+			*out++ = static_cast<unsigned char>(val        & mask);
+		}
+
+		if (first != last)
+		{
+			switch (last - first)
+			{
+				case 1:
+					// theoretically this is normal, and we should process it, but in practice -
+					// there is no way base64 encoder would produce not a full quadruplet with 1 character
+					throw not_enough_input();
+
+				case 2:
+					//          /   << 6   /           /
+					// +---------------+---------------+
+					// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+					// +---------------+---------------+
+					//          /     >> 4     /
+
+					val = static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[0]))) << 6u
+						| static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[1])));
+
+					*out++ = static_cast<unsigned char>(val >> 4u & mask);
+					break;
+
+				case 3:
+					//             /   << 12   /    << 6   /           /
+					// +---------------+---------------+---------------+
+					// |7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|7|6|5|4|3|2|1|0|
+					// +---------------+---------------+---------------+
+					//             /    >> 10      /      >> 2     /
+
+					val = static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[0]))) << 12u
+						| static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[1]))) << 6u
+						| static_cast<std::uint32_t>(static_cast<unsigned char>(decode_char(first[2])));
+
+					*out++ = static_cast<unsigned char>(val >> 10u & mask);
+					*out++ = static_cast<unsigned char>(val >>  2u & mask);
+
+					break;
+
+				default: EXT_UNREACHABLE();
+			}
+		}
+
+		return out;
 	}
-	
+
 	template <class RandomAccessIterator, class OutputContainer>
 	std::enable_if_t<ext::is_container_v<OutputContainer>/*, OutputContainer &*/>
 	decode_base64(RandomAccessIterator first, RandomAccessIterator last, OutputContainer & out)
 	{
-		typedef base64::decode_itearator<RandomAccessIterator> base64_itearator;
-
 		// we are appending
 		auto out_size = base64::decode_estimation(last - first);
 		auto old_size = out.size();
 		out.resize(old_size + out_size);
 
-		auto out_beg = boost::begin(out) + old_size;
-		std::copy(base64_itearator(first), base64_itearator(last), out_beg);
+		auto out_beg  = boost::begin(out) + old_size;
+		auto out_last = boost::end(out);
+		out_last = decode_base64(first, last, out_beg);
+		out.resize(out_last - out_beg);
 	}
 
 	template <class InputRange, class OutputContainer>
