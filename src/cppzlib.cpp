@@ -48,7 +48,7 @@ namespace zlib
 	/*                     others                                           */
 	/************************************************************************/
 	zlib_error::zlib_error(int code, const char * msg)
-		: std::runtime_error(nullptr)
+		: std::runtime_error("")
 	{
 		ec = make_zlib_error(code);
 		errmsg = ext::FormatError(ec);
