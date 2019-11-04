@@ -98,13 +98,13 @@ namespace ext
 		time_point next_in(Lock & lk) const noexcept;
 
 	public:
-		template <class Functor>
-		auto submit(time_point tp, Functor && func) ->
-			ext::future<std::invoke_result_t<std::decay_t<Functor>>>;
+		template <class Functor, class ... Args>
+		auto submit(time_point tp, Functor && func, Args && ... args) ->
+			ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>;
 
-		template <class Functor>
-		auto submit(duration  rel, Functor && func) ->
-			ext::future<std::invoke_result_t<std::decay_t<Functor>>>;
+		template <class Functor, class ... Args>
+		auto submit(duration  rel, Functor && func, Args && ... args) ->
+			ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>;
 		
 		void clear() noexcept;
 
@@ -119,15 +119,22 @@ namespace ext
 		threaded_scheduler & operator =(const threaded_scheduler &) = delete;
 	};
 
-	template <class Functor>
-	auto threaded_scheduler::submit(time_point tp, Functor && func) ->
-		ext::future<std::invoke_result_t<std::decay_t<Functor>>>
+	template <class Functor, class ... Args>
+	auto threaded_scheduler::submit(time_point tp, Functor && func, Args && ... args) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>
 	{
-		typedef std::invoke_result_t<std::decay_t<Functor>> result_type;
-		typedef task_impl<std::decay_t<Functor>, result_type> task_type;
-		typedef ext::future<result_type> future_type;
+		auto closure = [func = std::forward<Functor>(func),
+		                args_tuple = std::make_tuple(std::forward<Args>(args)...)]() mutable
+		{
+			return ext::apply(std::move(func), std::move(args_tuple));
+		};
+		
+		using result_type = std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>;
+		using functor_type = decltype(closure);
+		using task_type = task_impl<functor_type, result_type>;
+		using future_type = ext::future<result_type>;
 
-		auto task = ext::make_intrusive<task_type>(tp, std::forward<Functor>(func));
+		auto task = ext::make_intrusive<task_type>(tp, std::move(closure));
 		future_type fut {task};
 
 		{
@@ -139,10 +146,10 @@ namespace ext
 		return fut;
 	}
 
-	template <class Functor>
-	inline auto threaded_scheduler::submit(duration rel, Functor && func) ->
-		ext::future<std::invoke_result_t<std::decay_t<Functor>>>
+	template <class Functor, class ... Args>
+	inline auto threaded_scheduler::submit(duration rel, Functor && func, Args && ... args) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>
 	{
-		return submit(rel + time_point::clock::now(), std::forward<Functor>(func));
+		return submit(rel + time_point::clock::now(), std::forward<Functor>(func), std::forward<Args>(args)...);
 	}
 }

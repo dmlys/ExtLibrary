@@ -179,13 +179,13 @@ namespace ext
 
 	public: // job control
 		/// submits task for execution, returns future representing result of execution.
-		template <class Functor>
-		auto submit(Functor && func) ->
-			ext::future<std::invoke_result_t<std::decay_t<Functor>>>;
+		template <class Functor, class ... Args>
+		auto submit(Functor && func, Args && ... args) ->
+		    ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>;
 		
-		template <class Future, class Functor>
-		auto submit(Future future, Functor && func) ->
-			ext::future<std::invoke_result_t<std::decay_t<Functor>, Future>>;
+		template <class Future, class Functor, class ... Args>
+		auto submit(Future future, Functor && func, Args && ... args) ->
+			ext::future<std::invoke_result_t<std::decay_t<Functor>, std::enable_if_t<is_future_type_v<Future>, Future>, std::decay_t<Args>...>>;
 
 		/// clears all not already executed tasks.
 		/// Associated futures status become abandoned
@@ -203,15 +203,23 @@ namespace ext
 		thread_pool & operator =(const thread_pool &) = delete;
 	};
 
-	template <class Functor>
-	auto thread_pool::submit(Functor && func) ->
-		ext::future<std::invoke_result_t<std::decay_t<Functor>>>
+	template <class Functor, class ... Args>
+	auto thread_pool::submit(Functor && func, Args && ... args) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>>
 	{
-		typedef std::invoke_result_t<std::decay_t<Functor>> result_type;
-		typedef task_impl<std::decay_t<Functor>, result_type> task_type;
-		typedef ext::future<result_type> future_type;
+		using result_type = std::invoke_result_t<std::decay_t<Functor>, std::decay_t<Args>...>;
 		
-		auto task = ext::make_intrusive<task_type>(std::forward<Functor>(func));
+		auto closure = [func = std::forward<Functor>(func),
+		                args_tuple = std::make_tuple(std::forward<Args>(args)...)]() mutable -> result_type
+		{
+			return ext::apply(std::move(func), std::move(args_tuple));
+		};
+
+		using functor_type = decltype(closure);
+		using task_type = task_impl<functor_type, result_type>;
+		using future_type = ext::future<result_type>;
+		
+		auto task = ext::make_intrusive<task_type>(std::move(closure));
 		future_type fut {task};
 
 		{
@@ -223,24 +231,25 @@ namespace ext
 		return fut;
 	}
 
-	template <class Future, class Functor>
-	auto thread_pool::submit(Future future, Functor && func) ->
-		ext::future<std::invoke_result_t<std::decay_t<Functor>, Future>>
+	template <class Future, class Functor, class ... Args>
+	auto thread_pool::submit(Future future, Functor && func, Args && ... args) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>, std::enable_if_t<is_future_type_v<Future>, Future>, std::decay_t<Args>...>>
 	{
 		static_assert(ext::is_future_type_v<Future>);
 
 		auto handle = future.handle();
-		auto wrapped = [func = std::forward<Functor>(func), future = std::move(future)]() mutable
+		auto closure = [func = std::forward<Functor>(func),
+		                args_tuple = std::make_tuple(std::move(future), std::forward<Args>(args)...)]() mutable
 		{
-			return std::move(func)(std::move(future));
+			return ext::apply(std::move(func), std::move(args_tuple));
 		};
 
-		typedef decltype(wrapped) functor_type;
-		typedef std::invoke_result_t<functor_type> result_type;
-		typedef task_impl<functor_type, result_type> task_type;
-		typedef ext::future<result_type> future_type;
+		using functor_type = decltype(closure);
+		using result_type = std::invoke_result_t<functor_type>;
+		using task_type = task_impl<functor_type, result_type>;
+		using future_type = ext::future<result_type>;
 
-		auto task = ext::make_intrusive<task_type>(std::move(wrapped));
+		auto task = ext::make_intrusive<task_type>(std::move(closure));
 		future_type fut {task};
 
 		if (handle->is_deferred())
