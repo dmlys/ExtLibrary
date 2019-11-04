@@ -145,7 +145,7 @@ namespace ext
 			noexcept(noexcept(((*std::forward<Pointer>(ptr)).*pmf)(std::forward<Args>(args)...)))
 			-> std::enable_if_t<
 				std::is_function<FuncType>::value &&
-				is_reference_wrapper<std::decay_t<Pointer>>::value &&
+				!is_reference_wrapper<std::decay_t<Pointer>>::value &&
 				!std::is_base_of<Base, std::decay_t<Pointer>>::value,
 				decltype(((*std::forward<Pointer>(ptr)).*pmf)(std::forward<Args>(args)...))
 			>
