@@ -52,8 +52,6 @@ namespace ext
 		typedef Type *     pointer;
 		typedef Type &     referecne;
 
-		typedef decltype(intrusive_ptr_use_count(std::declval<value_type *>())) count_type;
-
 	private:
 		value_type * m_ptr = nullptr;
 
@@ -236,8 +234,6 @@ namespace ext
 		typedef Type       value_type;
 		typedef Type *     pointer;
 		typedef Type &     referecne;
-
-		typedef decltype(intrusive_ptr_use_count(std::declval<value_type *>())) count_type;
 
 	private:
 		value_type * m_ptr = defval();
