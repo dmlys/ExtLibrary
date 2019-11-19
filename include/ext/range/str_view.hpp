@@ -33,7 +33,7 @@ namespace ext
 
 	/// similar to boost::as_literal, but tries to return std::string_view,
 	/// thus working only with contiguous string ranges, string literals and std::string are those.
-	/// Also explicitly deleted for temprorary objects
+	/// Also explicitly deleted for temporary objects
 	template <class String>
 	inline auto str_view(const String & str) ->
 		std::enable_if_t<ext::is_contiguous_range_v<String>, typename str_view_traits<String>::string_view>

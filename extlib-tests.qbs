@@ -23,6 +23,7 @@ CppApplication
 		"stdc++fs", "fmt",
 		//"boost_system",
 		//"boost_test_exec_monitor",
+		"boost_locale",
 		"boost_unit_test_framework",
 	]
 

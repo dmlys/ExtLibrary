@@ -1,4 +1,4 @@
-#define BOOST_TEST_MODULE "extlib test"
+#define BOOST_TEST_MODULE "extlib tests"
 //#define BOOST_TEST_MAIN
 #include <boost/test/unit_test.hpp>
 #include "test_files.h"
