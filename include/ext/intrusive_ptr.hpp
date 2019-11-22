@@ -11,18 +11,20 @@ namespace ext
 	// special tag type for no addref overload
 	class noaddref_type {};
 	const noaddref_type noaddref;
-
-	/// smart pointer for intrusive types.
-	/// see also intrusive_ptr, intrusive_atomic_counter, intrusive_plain_counter helper classes.
-	/// 
-	/// Type should provide functions via ADL:
+	
+	/// ADL pointer traits for intrusive_ptr/intrusive_cow_ptr, pointer is managed via functions:
 	/// * intrusive_ptr_add_ref(value_type *) -> void
 	/// * intrusive_ptr_release(value_type *) -> void
-	/// * intrusive_ptr_use_count(const value_type *) -> counter_type
+	/// * intrusive_ptr_use_count(const value_type *) -> counter_type, optional
+	/// additionally for intrusive_cow_ptr
 	/// * intrusive_ptr_default(const value_type *) -> convertible to   value_type *
+	/// * intrusive_ptr_clone(const value_type *, value_type *&) -> void
 	/// 
 	/// all functions, even those who actually not need it,
 	/// take pointer as argument, so functions can be provided on ADL basis.
+	/// 
+	/// default constructed intrusive_cow_ptr holds a value returned by intrusive_ptr_default,
+	/// which is typically nullptr, but can be some shared empty val.
 	/// 
 	/// Functions description:
 	/// * void intrusive_ptr_add_ref(value_type * ptr)
@@ -36,35 +38,70 @@ namespace ext
 	///        if (--ptr->refs == 0)
 	///           delete ptr;
 	/// 
-	/// * auto intrusive_ptr_use_count(const value_type * ptr) -> ${ariphmetic type}
+	/// * auto intrusive_ptr_use_count(const value_type * ptr) -> ${arithmetic type}
 	///        returns current refs. for nullptr should return 0
 	///        typical implementation would be:
 	///        return ptr->refs;
-	template <class Type>
-	class intrusive_ptr :
-		boost::totally_ordered<intrusive_ptr<Type>, const Type *,
-		boost::totally_ordered1<intrusive_ptr<Type>> >
+	/// 
+	/// additionally for intrusive_cow_ptr
+	/// * auto intrusive_ptr_default(const value_type *) -> value_type */std::nullptr_t
+	/// 
+	///        returns pointer for a default constructed object.
+	///        if it returns pointer to shared empty object,
+	///        reference counter must be increased as if by intrusive_ptr_add_ref.
+	///
+	///        typical implementation would be: return nullptr;
+	///        or for shared empty:  intrusive_ptr_add_ref(&g_global_shared); return &g_global_shared;
+	///        
+	/// * void intrusive_ptr_clone(const value_type * ptr, value_type * & dest)
+	///        returns copy of object pointed by ptr into dest,
+	///        copy must have increased reference count as if by intrusive_ptr_add_ref.
+	///        
+	///        typical implementation would be:
+	///       	dest = new value_type(*ptr);
+	///       	copy->refs = 1;
+	/// 
+	class adl_intrusive_pointer_traits
 	{
-		typedef intrusive_ptr self_type;
+	public:
+		template <class Type> static inline auto use_count(const Type * ptr) noexcept { return ptr ? intrusive_ptr_use_count(ptr) : 0; }
+		template <class Type> static inline auto addref(Type * ptr)          noexcept { if (ptr) intrusive_ptr_add_ref(ptr); }
+		template <class Type> static inline auto subref(Type * ptr)          noexcept { if (ptr) intrusive_ptr_release(ptr); }
+		
+		template <class Type> static inline auto defval(const Type * ptr)               noexcept { return intrusive_ptr_default(ptr); }
+		template <class Type> static inline auto clone(const Type * ptr, Type * & dest) noexcept { return intrusive_ptr_clone(ptr, dest); }
+	};
+	
+	/// smart pointer for intrusive types.
+	/// see also adl_intrusive_pointer_traits, intrusive_atomic_counter, intrusive_plain_counter helper classes.
+	template <class Type, class PointerTraits = adl_intrusive_pointer_traits>
+	class intrusive_ptr :
+		boost::totally_ordered<intrusive_ptr<Type, PointerTraits>, const Type *,
+		  boost::totally_ordered1<intrusive_ptr<Type, PointerTraits>, 
+		    PointerTraits> >
+	{
+		using self_type = intrusive_ptr;
 
 	public:
-		typedef Type       value_type;
-		typedef Type *     pointer;
-		typedef Type &     referecne;
+		using pointer_traits = PointerTraits;
+		
+		using value_type = Type;
+		using pointer    = Type *;
+		using referecne  = Type &;
 
 	private:
 		value_type * m_ptr = nullptr;
 
 	public:
-		auto use_count() const noexcept { return m_ptr ? intrusive_ptr_use_count(m_ptr) : 0; }
-		void addref()          noexcept { if (m_ptr) intrusive_ptr_add_ref(m_ptr); }
-		void subref()          noexcept { if (m_ptr) intrusive_ptr_release(m_ptr); }
+		auto use_count() const noexcept { return pointer_traits::use_count(m_ptr); }
+		void addref()          noexcept { return pointer_traits::addref(m_ptr); }
+		void subref()          noexcept { return pointer_traits::subref(m_ptr); }
 
 		// releases the ownership of the managed object if any.
 		// get() returns nullptr after the call. Same as unique_ptr::release
 		auto release() noexcept { return std::exchange(m_ptr, nullptr); }
 
-		// reset returns whatever intrusive_ptr_release returns(including void)
+
 		void reset(value_type * ptr)                noexcept;
 		void reset(value_type * ptr, noaddref_type) noexcept;
 		void reset(value_type * ptr, bool add_ref)  noexcept;
@@ -100,157 +137,111 @@ namespace ext
 		friend void swap(intrusive_ptr & p1, intrusive_ptr & p2) noexcept { std::swap(p1.m_ptr, p2.m_ptr); }
 
 		template <class Other, class = typename std::enable_if_t<std::is_convertible<Other *, value_type *>::value>>
-		intrusive_ptr(const intrusive_ptr<Other> & other) noexcept
+		intrusive_ptr(const intrusive_ptr<Other, PointerTraits> & other) noexcept
 			: m_ptr(other.get())
 		{
 			addref();
 		}
 
-		// for instrusive_ptr p = nullptr;
+		// for intrusive_ptr p = nullptr;
 		intrusive_ptr(std::nullptr_t) : m_ptr(nullptr) {};
 		intrusive_ptr & operator =(std::nullptr_t) noexcept { subref(); m_ptr = nullptr; return *this; }
 	};
 
-	template <class Type>
-	void intrusive_ptr<Type>::reset(value_type * ptr) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_ptr<Type, PointerTraits>::reset(value_type * ptr) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 		addref();
 	}
 
-	template <class Type>
-	void intrusive_ptr<Type>::reset(value_type * ptr, noaddref_type) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_ptr<Type, PointerTraits>::reset(value_type * ptr, noaddref_type) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 	}
 
-	template <class Type>
-	void intrusive_ptr<Type>::reset(value_type * ptr, bool add_ref) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_ptr<Type, PointerTraits>::reset(value_type * ptr, bool add_ref) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 		if (add_ref) addref();
 	}
 
-	template <class Type, class ... Args>
-	intrusive_ptr<Type> make_intrusive(Args && ... args)
+	template <class Type, class PointerTraits = adl_intrusive_pointer_traits, class ... Args>
+	intrusive_ptr<Type, PointerTraits> make_intrusive(Args && ... args)
 	{
-		return intrusive_ptr<Type>(new Type(std::forward<Args>(args)...), ext::noaddref);
+		return intrusive_ptr<Type, PointerTraits>(new Type(std::forward<Args>(args)...), ext::noaddref);
 	}
 
-	template <class Type>
-	inline const Type * get_pointer(const intrusive_ptr<Type> & ptr)
+	template <class Type, class PointerTraits>
+	inline const Type * get_pointer(const intrusive_ptr<Type, PointerTraits> & ptr)
 	{
 		return ptr.get();
 	}
 
-	template <class Type>
-	inline Type * get_pointer(intrusive_ptr<Type> & ptr)
+	template <class Type, class PointerTraits>
+	inline Type * get_pointer(intrusive_ptr<Type, PointerTraits> & ptr)
 	{
 		return ptr.get();
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_ptr<DestType> const_pointer_cast(const intrusive_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_ptr<DestType, PointerTraits> const_pointer_cast(const intrusive_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_ptr<DestType> {const_cast<DestType *>(ptr.get())};
+		return intrusive_ptr<DestType, PointerTraits> {const_cast<DestType *>(ptr.get())};
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_ptr<DestType> static_pointer_cast(const intrusive_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_ptr<DestType, PointerTraits> static_pointer_cast(const intrusive_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_ptr<DestType> {static_cast<DestType *>(ptr.get())};
+		return intrusive_ptr<DestType, PointerTraits> {static_cast<DestType *>(ptr.get())};
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_ptr<DestType> dynamic_pointer_cast(const intrusive_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_ptr<DestType, PointerTraits> dynamic_pointer_cast(const intrusive_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_ptr<DestType> {dynamic_cast<DestType *>(ptr.get())};
+		return intrusive_ptr<DestType, PointerTraits> {dynamic_cast<DestType *>(ptr.get())};
 	}
 
 
 
 	/// smart pointer for intrusive copy-on-write(cow) types, functionally extends intrusive_ptr.
-	/// see also intrusive_atomic_counter, intrusive_plain_counter helper classes.
-	/// 
-	/// Type should provide functions via ADL:
-	/// * intrusive_ptr_add_ref(value_type *) -> void
-	/// * intrusive_ptr_release(value_type *) -> void
-	/// * intrusive_ptr_use_count(const value_type *) -> counter_type
-	/// * intrusive_ptr_default(const value_type *) -> convertible to   value_type *
-	/// * intrusive_ptr_clone(const value_type *, value_type *&) -> void
-	/// 
-	/// all functions, even those who actually not need it,
-	/// take pointer as argument, so functions can be provided on ADL basis.
-	///
-	/// default constructed intrusive_cow_ptr holds a value returned by intrusive_ptr_default,
-	/// which is typically nullptr, but can be some shared empty val.
-	/// 
-	/// 
-	/// Functions description:
-	/// * void intrusive_ptr_add_ref(value_type * ptr)
-	///        increase reference counter
-	///        typical implementation would be:
-	///        ++ptr->refs
-	/// 
-	/// * void intrusive_ptr_release(value_type * ptr)
-	///        decreases reference counter and deletes object if counter reaches 0
-	///        typical implementation would be:
-	///        if (--ptr->refs == 0)
-	///           delete ptr;
-	/// 
-	/// * auto intrusive_ptr_use_count(const value_type * ptr) -> ${ariphmetic type}
-	///        returns current refs. for nullptr should return 0
-	///        typical implementation would be:
-	///        return ptr->refs;
-	/// 
-	/// * auto intrusive_ptr_default(const value_type *) -> value_type */std::nullptr_t
-	/// 
-	///        returns pointer for a default constructed object.
-	///        if it returns pointer to shared empty object,
-	///        reference counter must be increased as if by intrusive_ptr_add_ref.
-	///
-	///        typical implementation would be: return nullptr;
-	///        or for shared empty:  intrusive_ptr_add_ref(&g_global_shared); return &g_global_shared;
-	///        
-	/// * void intrusive_ptr_clone(const value_type * ptr, value_type * & dest)
-	///        returns copy of object pointed by ptr into dest,
-	///        copy must have increased reference count as if by intrusive_ptr_add_ref.
-	///        
-	///        typical implementation would be:
-	///       	dest = new value_type(*ptr);
-	///       	copy->refs = 1;
-	/// 
-	template <class Type>
+	/// see also adl_intrusive_pointer_traits, intrusive_atomic_counter, intrusive_plain_counter helper classes.
+	template <class Type, class PointerTraits = adl_intrusive_pointer_traits>
 	class intrusive_cow_ptr :
-		boost::totally_ordered<intrusive_cow_ptr<Type>, const Type *,
-		boost::totally_ordered1<intrusive_cow_ptr<Type>> >
+		boost::totally_ordered<intrusive_cow_ptr<Type, PointerTraits>, const Type *,
+		  boost::totally_ordered1<intrusive_cow_ptr<Type, PointerTraits>, 
+		    PointerTraits> >
 	{
-		typedef intrusive_cow_ptr self_type;
+		using self_type = intrusive_cow_ptr;
 
 	public:
-		typedef Type       value_type;
-		typedef Type *     pointer;
-		typedef Type &     referecne;
+		using pointer_traits = PointerTraits;
+		
+		using value_type = Type;
+		using pointer    = Type *;
+		using referecne  = Type &;
 
 	private:
 		value_type * m_ptr = defval();
 
 	private:
-		static value_type * defval() noexcept { return intrusive_ptr_default(static_cast<value_type *>(nullptr)); }
+		static value_type * defval() noexcept { return pointer_traits::defval(static_cast<const value_type *>(nullptr)); }
 
 	public:
-		auto use_count() const noexcept { return m_ptr ? intrusive_ptr_use_count(m_ptr) : 0; }
-		void addref()          noexcept { if (m_ptr) intrusive_ptr_add_ref(m_ptr); }
-		void subref()          noexcept { if (m_ptr) intrusive_ptr_release(m_ptr); }
+		auto use_count() const noexcept { return pointer_traits::use_count(m_ptr); }
+		void addref()          noexcept { return pointer_traits::addref(m_ptr); }
+		void subref()          noexcept { return pointer_traits::subref(m_ptr); }
 
 		// releases the ownership of the managed object if any.
 		// get() returns nullptr after the call. Same as unique_ptr::release
 		auto release() noexcept { return std::exchange(m_ptr, defval()); }
 
-		// reset returns whatever intrusive_ptr_release returns(including void)
+
 		void reset(value_type * ptr)                noexcept;
 		void reset(value_type * ptr, noaddref_type) noexcept;
 		void reset(value_type * ptr, bool add_ref)  noexcept;
@@ -295,7 +286,7 @@ namespace ext
 		friend void swap(intrusive_cow_ptr & p1, intrusive_cow_ptr & p2) noexcept { std::swap(p1.m_ptr, p2.m_ptr); }
 
 		template <class Other, class = typename std::enable_if_t<std::is_convertible<Other *, value_type *>::value>>
-		intrusive_cow_ptr(const intrusive_cow_ptr<Other> & other) noexcept
+		intrusive_cow_ptr(const intrusive_cow_ptr<Other, PointerTraits> & other) noexcept
 			: m_ptr(other.get_ptr())
 		{ addref(); }
 
@@ -304,70 +295,70 @@ namespace ext
 		intrusive_cow_ptr & operator =(std::nullptr_t) noexcept { subref(); m_ptr = nullptr; return *this; }
 	};
 
-	template <class Type>
-	void intrusive_cow_ptr<Type>::detach()
+	template <class Type, class PointerTraits>
+	void intrusive_cow_ptr<Type, PointerTraits>::detach()
 	{
 		// we are the only one, detach is not needed
 		if (use_count() <= 1) return;
 
 		// make a copy
 		value_type * copy;
-		intrusive_ptr_clone(m_ptr, copy);
-		intrusive_ptr_release(m_ptr);
+		pointer_traits::clone(m_ptr, copy);
+		pointer_traits::subref(m_ptr);
 		m_ptr = copy;
 	}
 
-	template <class Type>
-	void intrusive_cow_ptr<Type>::reset(value_type * ptr) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_cow_ptr<Type, PointerTraits>::reset(value_type * ptr) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 		addref();
 	}
 
-	template <class Type>
-	void intrusive_cow_ptr<Type>::reset(value_type * ptr, noaddref_type) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_cow_ptr<Type, PointerTraits>::reset(value_type * ptr, noaddref_type) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 	}
 
-	template <class Type>
-	void intrusive_cow_ptr<Type>::reset(value_type * ptr, bool add_ref) noexcept
+	template <class Type, class PointerTraits>
+	void intrusive_cow_ptr<Type, PointerTraits>::reset(value_type * ptr, bool add_ref) noexcept
 	{
 		subref();
 		m_ptr = ptr;
 		if (add_ref) addref();
 	}
 	
-	template <class Type>
-	inline const Type * get_pointer(const intrusive_cow_ptr<Type> & ptr)
+	template <class Type, class PointerTraits>
+	inline const Type * get_pointer(const intrusive_cow_ptr<Type, PointerTraits> & ptr)
 	{
 		return ptr.get();
 	}
 
-	template <class Type>
-	inline Type * get_pointer(intrusive_cow_ptr<Type> & ptr)
+	template <class Type, class PointerTraits>
+	inline Type * get_pointer(intrusive_cow_ptr<Type, PointerTraits> & ptr)
 	{
 		return ptr.get();
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_cow_ptr<DestType> const_pointer_cast(const intrusive_cow_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_cow_ptr<DestType, PointerTraits> const_pointer_cast(const intrusive_cow_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_cow_ptr<DestType> {const_cast<DestType *>(ptr.get_ptr())};
+		return intrusive_cow_ptr<DestType, PointerTraits> {const_cast<DestType *>(ptr.get_ptr())};
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_cow_ptr<DestType> static_pointer_cast(const intrusive_cow_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_cow_ptr<DestType, PointerTraits> static_pointer_cast(const intrusive_cow_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_cow_ptr<DestType> {static_cast<DestType *>(ptr.get_ptr())};
+		return intrusive_cow_ptr<DestType, PointerTraits> {static_cast<DestType *>(ptr.get_ptr())};
 	}
 
-	template <class DestType, class Type>
-	inline intrusive_cow_ptr<DestType> dynamic_pointer_cast(const intrusive_cow_ptr<Type> & ptr)
+	template <class DestType, class Type, class PointerTraits>
+	inline intrusive_cow_ptr<DestType, PointerTraits> dynamic_pointer_cast(const intrusive_cow_ptr<Type, PointerTraits> & ptr)
 	{
-		return intrusive_cow_ptr<DestType> {dynamic_cast<DestType *>(ptr.get_ptr())};
+		return intrusive_cow_ptr<DestType, PointerTraits> {dynamic_cast<DestType *>(ptr.get_ptr())};
 	}
 
 
