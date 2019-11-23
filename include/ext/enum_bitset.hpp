@@ -90,6 +90,8 @@ namespace ext
 		constexpr enum_bitset(bitset_type bitset) noexcept : m_bitset(bitset) {}
 		constexpr enum_bitset(unsigned long long val) noexcept : m_bitset(val) {}
 
+		constexpr enum_bitset(enum_type val) { set(val); }
+		constexpr enum_bitset(std::initializer_list<enum_type> vals);
 
 		template <class Char, class Traits, class Alloc>
 		explicit enum_bitset(
@@ -108,6 +110,12 @@ namespace ext
             Char one = Char('1')
 		) : m_bitset(str, n, zero, one) {}
 	};
+
+	template <class Enum, std::size_t Size>
+	constexpr enum_bitset<Enum, Size>::enum_bitset(std::initializer_list<enum_type> vals)
+	{
+		for (auto val : vals) set(val);
+	}
 
 	template <class Enum, std::size_t Size>
 	inline auto operator &(const enum_bitset<Enum, Size> & lhs, const enum_bitset<Enum, Size> & rhs) noexcept
