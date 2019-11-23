@@ -9,25 +9,25 @@ namespace ext
 {
 	/// formats error message like: <ErrCat>:<ErrCode>, <msg>
 	/// for example: generic:0x1, file not found
-	std::string FormatError(std::error_code err);
-	std::string FormatError(boost::system::error_code err);
+	std::string format_error(std::error_code err);
+	std::string format_error(boost::system::error_code err);
 
 	/// re-formats error message std::system_error::what(), so it contains
 	/// code description in format: <ErrCat>:<ErrCode>, <msg>
-	std::string FormatError(std::system_error & err);
-	std::string FormatError(boost::system::system_error err);
+	std::string format_error(std::system_error & err);
+	std::string format_error(boost::system::system_error err);
 
-	inline std::string FormatErrno(int err)
+	inline std::string format_errno(int err)
 	{
-		return FormatError(std::error_code(err, std::generic_category()));
+		return format_error(std::error_code(err, std::generic_category()));
 	}
 
-	inline void ThrowLastErrno(const std::string & errMsg)
+	inline void throw_last_errno(const std::string & errMsg)
 	{
 		throw std::system_error(errno, std::generic_category(), errMsg);
 	}
 
-	inline void ThrowLastErrno(const char * errMsg)
+	inline void throw_last_errno(const char * errMsg)
 	{
 		throw std::system_error(errno, std::generic_category(), errMsg);
 	}
@@ -45,7 +45,7 @@ namespace ext
 	boost::system::error_category const & boost_system_utf8_category() noexcept;
 
 	///эквивалентно throw std::system_error(GetLastError(), std::system_category(), errMsg);
-	void ThrowLastSystemError(const char * errMsg);
-	void ThrowLastSystemError(const std::string & errMsg);
+	void throw_last_system_error(const char * errMsg);
+	void throw_last_system_error(const std::string & errMsg);
 }
 #endif

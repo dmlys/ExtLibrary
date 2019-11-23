@@ -1,4 +1,4 @@
-#include <ext/Errors.hpp>
+#include <ext/errors.hpp>
 #include <ext/itoa.hpp>
 
 namespace ext
@@ -6,7 +6,7 @@ namespace ext
 	namespace
 	{
 		template <class ErrCode>
-		std::string FormatErrorImpl(const ErrCode & err)
+		static std::string format_error_impl(const ErrCode & err)
 		{
 			static_assert(std::is_same<decltype(err.value()), int>::value, "error code should be int");
 			std::string msg;
@@ -31,7 +31,7 @@ namespace ext
 		}
 
 		template <class SystemError, class ErrorCode>
-		std::string FormatSystemError(SystemError & ex, ErrorCode code)
+		static std::string format_system_error(SystemError & ex, ErrorCode code)
 		{
 			std::string result;
 			std::string_view msg = ex.what();
@@ -84,27 +84,27 @@ namespace ext
 	} // 'anonymous' namespace
 
 
-	std::string FormatError(std::error_code err)
+	std::string format_error(std::error_code err)
 	{
 #if BOOST_OS_WINDOWS
 		if (err.category() == std::system_category())
 			err.assign(err.value(), ext::system_utf8_category());
 #endif
 
-		return FormatErrorImpl(err);
+		return format_error_impl(err);
 	}
 
-	std::string FormatError(boost::system::error_code err)
+	std::string format_error(boost::system::error_code err)
 	{
 #if BOOST_OS_WINDOWS
 		if (err.category() == boost::system::system_category())
 			err.assign(err.value(), ext::boost_system_utf8_category());
 #endif
 
-		return FormatErrorImpl(err);
+		return format_error_impl(err);
 	}
 
-	std::string FormatError(std::system_error & err)
+	std::string format_error(std::system_error & err)
 	{
 		auto code = err.code();
 
@@ -113,10 +113,10 @@ namespace ext
 			code.assign(code.value(), ext::system_utf8_category());
 #endif
 
-		return FormatSystemError(err, code);
+		return format_system_error(err, code);
 	}
 
-	std::string FormatError(boost::system::system_error err)
+	std::string format_error(boost::system::system_error err)
 	{
 		auto code = err.code();
 
@@ -125,7 +125,7 @@ namespace ext
 			code.assign(code.value(), ext::boost_system_utf8_category());
 #endif
 
-		return FormatSystemError(err, code);
+		return format_system_error(err, code);
 	}
 }
 
@@ -158,7 +158,8 @@ namespace ext
 			                             nullptr);
 			if (!res)
 				return "FormatMessageW failed with " + std::to_string(GetLastError());
-			else {
+			else
+			{
 				std::string err = boost::locale::conv::utf_to_utf<char>(errBuf, errBuf + res);
 				/// message often contain "\r\n." at the end, delete them
 				boost::trim_right_if(err, boost::is_any_of("\r\n."));
@@ -166,7 +167,7 @@ namespace ext
 			}
 		}
 
-		struct SystemUtf8Category : std::error_category
+		struct system_utf8_category : std::error_category
 		{
 			std::string message(int err) const override;
 			const char * name() const noexcept override {return "system";}
@@ -174,7 +175,7 @@ namespace ext
 			std::error_condition default_error_condition(int code) const noexcept override;
 		};
 
-		struct BoostSystemUtf8Category : boost::system::error_category
+		struct boost_system_utf8_category : boost::system::error_category
 		{
 			std::string message(int err) const override;
 			const char * name() const noexcept override {return "system";}
@@ -182,48 +183,48 @@ namespace ext
 			boost::system::error_condition default_error_condition(int code) const noexcept override;
 		};
 
-		std::string SystemUtf8Category::message(int err) const
+		std::string system_utf8_category::message(int err) const
 		{
 			return GetMessage(err);
 		}
 
-		std::error_condition SystemUtf8Category::default_error_condition(int code) const noexcept
+		std::error_condition system_utf8_category::default_error_condition(int code) const noexcept
 		{
 			// forward to standard implementation
 			return std::system_category().default_error_condition(code);
 		}
 
-		std::string BoostSystemUtf8Category::message(int err) const
+		std::string boost_system_utf8_category::message(int err) const
 		{
 			return GetMessage(err);
 		}
 
-		boost::system::error_condition BoostSystemUtf8Category::default_error_condition(int code) const noexcept
+		boost::system::error_condition boost_system_utf8_category::default_error_condition(int code) const noexcept
 		{
 			// forward to standard implementation
 			return boost::system::system_category().default_error_condition(code);
 		}
 
-		const SystemUtf8Category SystemUtf8CategoryInstance {};
-		const BoostSystemUtf8Category BoostSystemUtf8CategoryInstance {};
+		const system_utf8_category system_utf8_category_instance {};
+		const boost_system_utf8_category boost_system_utf8_category_instance {};
 	} //anonymous namespace
 
 	std::error_category const & system_utf8_category() noexcept
 	{
-		return SystemUtf8CategoryInstance;
+		return system_utf8_category_instance;
 	}
 
 	boost::system::error_category const & boost_system_utf8_category() noexcept
 	{
-		return BoostSystemUtf8CategoryInstance;
+		return boost_system_utf8_category_instance;
 	}
 
-	void ThrowLastSystemError(const std::string & errMsg)
+	void throw_last_system_error(const std::string & errMsg)
 	{
 		throw std::system_error(GetLastError(), std::system_category(), errMsg);
 	}
 
-	void ThrowLastSystemError(const char * errMsg)
+	void throw_last_system_error(const char * errMsg)
 	{
 		throw std::system_error(GetLastError(), std::system_category(), errMsg);
 	}

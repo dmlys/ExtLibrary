@@ -1,6 +1,6 @@
 #ifdef EXT_ENABLE_CPPZLIB
 #include <ext/cppzlib.hpp>
-#include <ext/Errors.hpp>
+#include <ext/errors.hpp>
 #include <cstring> // for std::strlen
 
 namespace zlib
@@ -51,7 +51,7 @@ namespace zlib
 		: std::runtime_error("")
 	{
 		ec = make_zlib_error(code);
-		errmsg = ext::FormatError(ec);
+		errmsg = ext::format_error(ec);
 		size_t len;
 		if (msg && (len = std::strlen(msg)) > 0)
 		{

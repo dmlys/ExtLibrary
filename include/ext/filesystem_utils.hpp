@@ -9,7 +9,7 @@
 #include <filesystem>
 
 #include <ext/range.hpp>
-#include <ext/Errors.hpp>
+#include <ext/errors.hpp>
 #include <ext/is_string.hpp>
 
 namespace ext
@@ -68,7 +68,7 @@ namespace ext
 		if (!ifs.is_open())
 		{
 			//      "Failed to open {1}, {2}
-			reps << "Failed to open " << path << ", " << ext::FormatErrno(errno) << std::endl;
+			reps << "Failed to open " << path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 
@@ -96,7 +96,7 @@ namespace ext
 		if (ifs.bad())
 		{
 			// "Failed to read {1}, {2}
-			reps << "Failed to read " << path << ", " << ext::FormatErrno(errno) << std::endl;
+			reps << "Failed to read " << path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 
@@ -123,7 +123,7 @@ namespace ext
 		if (!ofs.is_open())
 		{
 			//      "Failed to open {1}, {2}
-			reps << "Failed to open " << path << ", " << ext::FormatErrno(errno) << std::endl;
+			reps << "Failed to open " << path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 		
@@ -131,7 +131,7 @@ namespace ext
 		if (ofs.bad())
 		{
 			// "Failed to read {1}, {2}
-			reps << "Failed to write " << path << ", " << ext::FormatErrno(errno) << std::endl;
+			reps << "Failed to write " << path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 		
