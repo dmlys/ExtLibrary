@@ -5,13 +5,10 @@
 #include <type_traits>
 #include <atomic>
 #include <boost/operators.hpp>
+#include <ext/noaddref.hpp>
 
 namespace ext
-{
-	// special tag type for no addref overload
-	class noaddref_type {};
-	const noaddref_type noaddref;
-	
+{	
 	/// ADL pointer traits for intrusive_ptr/intrusive_cow_ptr, pointer is managed via functions:
 	/// * intrusive_ptr_add_ref(value_type *) -> void
 	/// * intrusive_ptr_release(value_type *) -> void
