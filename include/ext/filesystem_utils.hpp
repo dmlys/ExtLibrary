@@ -4,9 +4,16 @@
 
 #include <fstream>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <regex>
 #include <filesystem>
+#include <boost/predef.h>
+
+#if BOOST_OS_WINDOWS
+#include <codecvt>
+#include <ext/codecvt_conv/generic_conv.hpp>
+#endif
 
 #include <ext/range.hpp>
 #include <ext/errors.hpp>
@@ -107,14 +114,6 @@ namespace ext
 		return true;
 	}
 
-	template <class Path, class Container>
-	bool read_file(const Path & path, Container & content, std::ostream & reps,
-	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
-	{
-		return read_file(path.c_str(), content, reps, mode);
-	}
-
-
 	template <class Container>
 	bool write_file(const std::filesystem::path::value_type * path, const Container & content, std::ostream & reps,
 	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
@@ -138,13 +137,39 @@ namespace ext
 		return true;
 	}
 
+#if BOOST_OS_WINDOWS
+	template <class Container>
+	bool read_file(const char * path, Container & content, std::ostream & reps,
+	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
+	{
+		const std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> u8_cvt;
+		std::wstring wstr = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		return read_file(wstr.c_str(), content, reps, mode);
+	}
+
+	template <class Container>
+	bool write_file(const char * path, const Container & content, std::ostream & resp,
+	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
+	{
+		const std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> u8_cvt;
+		std::wstring wstr = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		return write_file(wstr.c_str(), content, resp, mode);
+	}
+#endif
+
+	template <class Path, class Container>
+	bool read_file(const Path & path, Container & content, std::ostream & reps,
+	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
+	{
+		return read_file(path.c_str(), content, reps, mode);
+	}
+
 	template <class Path, class Container>
 	bool write_file(const Path & path, const Container & content, std::ostream & reps,
 	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
 	{
 		return write_file(path.c_str(), content, reps, mode);
 	}
-
 
 	struct file_read_error : std::runtime_error
 	{
