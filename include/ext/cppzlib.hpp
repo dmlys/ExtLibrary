@@ -192,8 +192,8 @@ namespace zlib
 	/// remember windowBits configures deflate formats
 	///    8 ..  MAX_WBITS       - zlib format
 	///   -8 .. -MAX_WBITS       - raw deflate format
-	///   -8 .. -MAX_WBITS + 16  - gzip format
-	///   -8 .. -MAX_WBITS + 32  - auto detect both gzip and zlib
+	///    8 ..  MAX_WBITS + 16  - gzip format
+	///    8 ..  MAX_WBITS + 32  - auto detect both gzip and zlib
 	/// prefer using MAX_WBITS
 	/// windowBits can be set by constructor, init, reset methods
 	class inflate_stream : public zstream<inflate_deleter>
@@ -300,7 +300,7 @@ namespace zlib
 	/// remember windowBits configures deflate formats
 	///    8 ..  MAX_WBITS      - zlib format
 	///   -8 .. -MAX_WBITS      - raw deflate format
-	///   -8 .. -MAX_WBITS + 16 - gzip format
+	///    8 ..  MAX_WBITS + 16 - gzip format
 	class deflate_stream : public zstream<deflate_deleter>
 	{
 		typedef zstream<deflate_deleter> base_type;
