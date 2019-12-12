@@ -8,6 +8,13 @@ namespace ext
 {
 	static void getexepath(int argc, char *argv[], std::filesystem::path & path, std::error_code & ec);
 
+	std::filesystem::path getexepath(int argc, char *argv[], std::error_code & ec)
+	{
+		std::filesystem::path path;
+		getexepath(argc, argv, path, ec);
+		return path;
+	}
+
 	std::filesystem::path getexepath(int argc, char *argv[])
 	{
 		std::error_code ec;

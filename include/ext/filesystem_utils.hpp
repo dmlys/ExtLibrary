@@ -201,6 +201,7 @@ namespace ext
 
 
 	/// получает полный путь к exe файлу, в рамках которого исполняется код
+	std::filesystem::path getexepath(int argc, char *argv[], std::error_code & ec);
 	std::filesystem::path getexepath(int argc, char *argv[]);
 }
 
