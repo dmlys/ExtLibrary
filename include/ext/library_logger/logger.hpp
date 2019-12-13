@@ -236,6 +236,7 @@ namespace ext::library_logger
 		if      (aci_word == "fatal") return Fatal;
 		else if (aci_word == "error") return Error;
 		else if (aci_word == "warn" ) return Warn;
+		else if (aci_word == "info" ) return Info;
 		else if (aci_word == "debug") return Debug;
 		else if (aci_word == "trace") return Trace;
 		else                          return Disabled;
