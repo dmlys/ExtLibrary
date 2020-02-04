@@ -28,5 +28,8 @@ namespace ext
 		using base_type::pptr;
 		using base_type::epptr;
 		using base_type::pbump;
+
+		using base_type::setg;
+		using base_type::setp;
 	};
 }
