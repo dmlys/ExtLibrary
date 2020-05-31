@@ -33,6 +33,8 @@ Project
 
 		Export
 		{
+			property bool with_zlib: project.with_zlib
+			
 			Depends { name: "cpp" }
 			cpp.cxxLanguageVersion : "c++17"
 
