@@ -2058,6 +2058,12 @@ namespace ext
 	public:
 		ext::future<value_type> get_future();
 
+		bool is_pending()    const noexcept { return m_ptr->is_pending();    }
+		bool is_ready()      const noexcept { return m_ptr->is_ready();      }
+		bool is_cancelled()  const noexcept { return m_ptr->is_cancelled();  }
+		bool has_value()     const noexcept { return m_ptr->has_value();     }
+		bool has_exception() const noexcept { return m_ptr->has_exception(); }
+		
 		bool cancel();
 		bool mark_uncancellable();
 		void set_value(const value_type & val);
@@ -2152,6 +2158,12 @@ namespace ext
 	public:
 		ext::future<value_type &> get_future();
 
+		bool is_pending()    const noexcept { return m_ptr->is_pending();    }
+		bool is_ready()      const noexcept { return m_ptr->is_ready();      }
+		bool is_cancelled()  const noexcept { return m_ptr->is_cancelled();  }
+		bool has_value()     const noexcept { return m_ptr->has_value();     }
+		bool has_exception() const noexcept { return m_ptr->has_exception(); }
+		
 		bool cancel();
 		bool mark_uncancellable();
 		void set_value(value_type & val);
@@ -2236,6 +2248,12 @@ namespace ext
 	public:
 		ext::future<value_type> get_future();
 
+		bool is_pending()    const noexcept { return m_ptr->is_pending();    }
+		bool is_ready()      const noexcept { return m_ptr->is_ready();      }
+		bool is_cancelled()  const noexcept { return m_ptr->is_cancelled();  }
+		bool has_value()     const noexcept { return m_ptr->has_value();     }
+		bool has_exception() const noexcept { return m_ptr->has_exception(); }
+		
 		bool cancel();
 		bool mark_uncancellable();
 		void set_value(void);
@@ -2267,7 +2285,7 @@ namespace ext
 		m_ptr->mark_retrived();
 		return {m_ptr};
 	}
-
+	
 	inline bool promise<void>::cancel()
 	{
 		check_state();
@@ -2315,6 +2333,12 @@ namespace ext
 	public:
 		bool valid() const noexcept { return m_ptr ? m_ptr->valid() : false; }
 		ext::future<RetType> get_future();
+		
+		bool is_pending()    const noexcept { return m_ptr->is_pending();    }
+		bool is_ready()      const noexcept { return m_ptr->is_ready();      }
+		bool is_cancelled()  const noexcept { return m_ptr->is_cancelled();  }
+		bool has_value()     const noexcept { return m_ptr->has_value();     }
+		bool has_exception() const noexcept { return m_ptr->has_exception(); }
 
 		void reset();
 		void operator()(Args ... args);
