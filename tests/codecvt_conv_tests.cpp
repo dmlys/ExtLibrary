@@ -1,5 +1,5 @@
 #include <boost/predef.h>
-#if BOOST_OS_WINDOWS
+#if BOOST_OS_WINDOWS and not BOOST_PLAT_MINGW
 
 #include <locale>
 #include <codecvt>
@@ -35,8 +35,8 @@ namespace
 		std::wstring martin_ru;
 
 		CodecvtFixture()
-			: cp1251(".1251"),
-			  cp1252(".1252")
+			: cp1251("ru_RU.cp1251"),
+			  cp1252("en_US.cp1252")
 		{
 			ReadFiles();
 		}

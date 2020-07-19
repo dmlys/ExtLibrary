@@ -19,13 +19,24 @@ CppApplication
 	cpp.libraryPaths: project.additionalLibraryPaths
 
 
-	cpp.dynamicLibraries: [
-		"stdc++fs", "fmt",
-		//"boost_system",
-		//"boost_test_exec_monitor",
-		"boost_locale",
-		"boost_unit_test_framework",
-	]
+	cpp.dynamicLibraries: 
+	{
+		var libs = [
+			"stdc++fs", "fmt",
+			//"boost_system",
+			//"boost_test_exec_monitor",
+			"boost_locale",
+			"boost_unit_test_framework",
+		]
+		
+		if (extlib.with_zlib)
+			libs.push("z")
+		
+		if (qbs.toolchain.contains("mingw"))
+			libs.push("ssp") // for mingw(gcc) stack protector, _FORTIFY_SOURCE stuff
+		
+		return libs
+	}
 
 	files: [
 		"tests/**"
