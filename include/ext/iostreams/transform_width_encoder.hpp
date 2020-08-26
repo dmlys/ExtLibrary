@@ -126,11 +126,11 @@ namespace iostreams
 		std::streamsize write(Sink & sink, const char * data, std::streamsize n)
 		{
 			// on every call we should:
-			//  * if we have not full group from previous call - try to full it
+			//  * if we have not full group from previous call - try to fill it
 			//    and if successful - write it to buffer.
 			//    adjust data, by taken data
 			//   
-			//  * store not full group at the end of input batch into m_storebuf(it fried at previous step)
+			//  * store not full group at the end of input batch into m_storebuf(it tried at previous step)
 			//  * encode full groups into buffer, write into sink, repeat until all is written
 			//  
 			//  - on flush - fill group with padding and write to sink
