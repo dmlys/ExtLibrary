@@ -35,6 +35,9 @@ namespace ext::stream_filtering
 		virtual auto process(const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool finish)
 			-> std::tuple<std::size_t, std::size_t, bool> override;
 		
+		virtual void reset() override;
+		virtual std::string_view name() const override { return "transform_width_filter"; }
+		
 	public:
 		constexpr transform_width_filter() = default;
 		transform_width_filter(processing_functor functor) : m_functor(std::move(functor)) {}
@@ -119,4 +122,13 @@ namespace ext::stream_filtering
 		return std::make_tuple(read, written, eos);
 	}
 
+	template <class ProcessorFunctor, unsigned InputGroupSize, unsigned OutputGroupSize>
+	void transform_width_filter<ProcessorFunctor, InputGroupSize, OutputGroupSize>::reset()
+	{
+		m_inputBufferSize = 0;
+		m_outputBufferSize = 0;
+		m_outputBufferConsumed = 0;
+		
+		std::fill_n(m_buffer.data(), m_buffer.size(), 0);
+	}
 }

@@ -4,11 +4,15 @@
 #include <ostream>
 #include <algorithm>
 
+#include <array>
+#include <vector>
+
 #include <boost/scope_exit.hpp>
 #include <boost/mp11.hpp>
 
 #include <ext/type_traits.hpp>
 #include <ext/utility.hpp>
+#include <ext/range/range_traits.hpp> // for ext::has_resize_method
 #include <ext/stream_filtering/filter_types.hpp>
 
 /// stream_filtering - simple library for writting and using byte stream filters and filter chains.
@@ -71,7 +75,11 @@ namespace ext::stream_filtering
 	template <class FilterVector, class InputBuffer, class OutputBuffer>
 	void filter_memory(processing_parameters params, FilterVector & filters, const InputBuffer & input, OutputBuffer & output);
 
-
+	/// \internal
+	/// expands given container, by resising it 1.5 times
+	template <class Container>
+	void expand_container(Container & cont);
+	
 	/// \internal
 	/// calculates threshold for determine if buffer is full
 	/// basically buffer is full if it's size is 80% of capacity
@@ -127,6 +135,60 @@ namespace ext::stream_filtering
 	template <class BufferType = std::vector<char>, class InputSteam, class OutputStream>
 	void copy_stream(InputSteam & is, OutputStream & os, unsigned buffer_size = impldef_default_buffer_size);
 	
+	namespace internal
+	{
+		template <class InputBuffer, class OutputBuffer>
+		struct buffer_traits
+		{
+			using input_buffer  = InputBuffer;
+			using output_buffer = OutputBuffer;
+			using buffer_type = boost::mp11::mp_if<ext::has_resize_method<input_buffer>, input_buffer, std::vector<char>>;
+		};
+		
+		template <
+			class FilterContainer, class BufferType,
+			int DataContextIncrement, int BufferIncrement,
+			class = void
+		>
+		struct streaming_context_traits
+		{
+			using filter_container = FilterContainer;
+			using buffer_type      = BufferType;
+			
+			// if FilterContainer is resizable template container - use it, otherwise fallback to std::vector
+			using data_context_container = boost::mp11::mp_eval_if_not<
+				boost::mp11::mp_all<boost::mp11::mp_is_list<filter_container>, ext::has_resize_method<filter_container>>,
+				std::vector<data_context>,
+				boost::mp11::mp_assign, FilterContainer, boost::mp11::mp_list<data_context>
+			>;
+			
+			using buffer_container = boost::mp11::mp_assign<data_context_container, boost::mp11::mp_list<buffer_type>>;
+			using streaming_context = ext::stream_filtering::streaming_context<filter_container, data_context_container, buffer_container>;
+			
+			static void init_data_context_container(data_context_container & cont, std::size_t size) { cont.resize(size); }
+			static void init_buffer_container(buffer_container & cont, std::size_t size)             { cont.resize(size); }
+		};
+		
+		template <
+			class Type, std::size_t N, class BufferType,
+			int DataContextIncrement, int BufferIncrement
+		>
+		struct streaming_context_traits<std::array<Type, N>, BufferType, DataContextIncrement, BufferIncrement>
+		{
+			using filter_container = std::array<Type, N>;
+			using buffer_type      = BufferType;
+		
+			// in case of std::array - size are known at compile time
+			using data_context_container = std::array<data_context, N + DataContextIncrement>;
+			using buffer_container       = std::array<buffer_type,  N + BufferIncrement>;
+			using streaming_context      = ext::stream_filtering::streaming_context<filter_container, data_context_container, buffer_container>;
+			
+			static void init_data_context_container(data_context_container & cont, std::size_t size) { }
+			static void init_buffer_container(buffer_container & cont, std::size_t size)             { }
+		};
+		
+	}
+	
 	
 	template <class ... Args>
 	unsigned find_ready_data(streaming_context<Args...> & ctx) noexcept
@@ -145,6 +207,14 @@ namespace ext::stream_filtering
 		}
 		
 		return 0;
+	}
+	
+	template <class Container>
+	inline void expand_container(Container & cont)
+	{
+		auto newsize = cont.size();
+		newsize += newsize / 2 + newsize % 2;
+		cont.resize(newsize);
 	}
 	
 	template <class ... Args>
@@ -198,12 +268,11 @@ namespace ext::stream_filtering
 	template <class FilterVector, class InputBuffer, class OutputBuffer>
 	void filter_memory(processing_parameters params, FilterVector & filters, const InputBuffer & input, OutputBuffer & output)
 	{
-		preprocess_processing_paramers(params);
+		preprocess_processing_parameters(params);
 		
-		static_assert (boost::mp11::mp_is_list<FilterVector>::value);
-		using data_context_vector = boost::mp11::mp_assign<FilterVector, boost::mp11::mp_list<data_context>>;
-		using buffer_vector = boost::mp11::mp_assign<FilterVector, boost::mp11::mp_list<InputBuffer>>;
-		using streaming_context = ext::stream_filtering::streaming_context<FilterVector, data_context_vector, buffer_vector>;
+		using buffer_traits = internal::buffer_traits<InputBuffer, OutputBuffer>;
+		using streaming_context_traits = internal::streaming_context_traits<FilterVector, typename buffer_traits::buffer_type, +1, -1>;
+		using streaming_context = typename streaming_context_traits::streaming_context;
 		
 		if (filters.empty())
 		{
@@ -212,10 +281,18 @@ namespace ext::stream_filtering
 		}
 		
 		streaming_context ctx;
-		ctx.params = std::move(params);
+		ctx.params  = std::move(params);
 		ctx.filters = std::move(filters);
-		ctx.data_contexts.resize(ctx.filters.size() + 1);
-		ctx.buffers.resize(ctx.filters.size() - 1);
+		
+		BOOST_SCOPE_EXIT_ALL(&filters, &ctx)
+		{
+			filters = std::move(ctx.filters);
+		};
+		
+		streaming_context_traits::init_data_context_container(ctx.data_contexts, ctx.filters.size() + 1);
+		streaming_context_traits::init_buffer_container(ctx.buffers, ctx.filters.size() - 1);
+		//ctx.data_contexts.resize(ctx.filters.size() + 1);
+		//ctx.buffers.resize(ctx.filters.size() - 1);
 		
 		const std::size_t buffer_size = std::clamp(ctx.params.default_buffer_size, ctx.params.minimum_buffer_size, ctx.params.maximum_buffer_size);
 		
@@ -252,9 +329,7 @@ namespace ext::stream_filtering
 			auto space_threshold = stream_filtering::fullbuffer_threshold(result_dctx.capacity, ctx.params);
 			if (space_avail <= space_threshold)
 			{
-				auto newsize = result_buffer.size();
-				newsize += newsize / 2 + newsize % 2;
-				result_buffer.resize(newsize);
+				expand_container(result_buffer);
 				
 				result_dctx.data_ptr = result_buffer.data();
 				result_dctx.capacity = result_buffer.size();
@@ -284,13 +359,11 @@ namespace ext::stream_filtering
 	template <class FilterVector, class InputStream, class OutputStream>
 	void filter_stream(processing_parameters params, FilterVector & filters, InputStream & is, OutputStream & os)
 	{
-		preprocess_processing_paramers(params);
+		preprocess_processing_parameters(params);
 		
-		static_assert (boost::mp11::mp_is_list<FilterVector>::value);
-		using data_context_vector = boost::mp11::mp_assign<FilterVector, boost::mp11::mp_list<data_context>>;
-		using buffer_type = boost::mp11::mp_assign<FilterVector, boost::mp11::mp_list<char>>;
-		using buffer_vector = boost::mp11::mp_assign<FilterVector, boost::mp11::mp_list<buffer_type>>;
-		using streaming_context = ext::stream_filtering::streaming_context<FilterVector, data_context_vector, buffer_vector>;
+		using buffer_type = std::vector<char>;
+		using streaming_context_traits = internal::streaming_context_traits<FilterVector, buffer_type, +1, +1>;
+		using streaming_context = typename streaming_context_traits::streaming_context;
 		
 		if (filters.empty())
 		{
@@ -301,8 +374,16 @@ namespace ext::stream_filtering
 		streaming_context ctx;
 		ctx.params = std::move(params);
 		ctx.filters = std::move(filters);
-		ctx.data_contexts.resize(ctx.filters.size() + 1);
-		ctx.buffers.resize(ctx.filters.size() + 1);
+		
+		BOOST_SCOPE_EXIT_ALL(&filters, &ctx)
+		{
+			filters = std::move(ctx.filters);
+		};
+		
+		streaming_context_traits::init_data_context_container(ctx.data_contexts, ctx.filters.size() + 1);
+		streaming_context_traits::init_buffer_container(ctx.buffers, ctx.filters.size() + 1);
+		//ctx.data_contexts.resize(ctx.filters.size() + 1);
+		//ctx.buffers.resize(ctx.filters.size() + 1);
 		
 		const auto buffer_size = std::clamp(ctx.params.default_buffer_size, ctx.params.minimum_buffer_size, ctx.params.maximum_buffer_size);
 		

@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 #include <functional>
+#include <string_view>
 
 #if not EXT_STREAM_FILTERING_DEFAULT_BUFFER_SIZE
 #define EXT_STREAM_FILTERING_DEFAULT_BUFFER_SIZE 1024
@@ -34,6 +35,13 @@ namespace ext::stream_filtering
 		virtual auto process(const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool eos)
 			-> std::tuple<std::size_t, std::size_t, bool> = 0;
 		//                  consumed,   written,   finished
+		
+		/// resets this filter state into default constructed state, ready to start over again
+		virtual void reset() = 0;
+		
+		/// Filter name, used only for logging and diagnostics purposes.
+		/// Some filter type name, like zlib_defalte_filter, optionally you can include some object instance naming
+		virtual std::string_view name() const = 0;
 		
 		// for future implementation
 		//virtual std::optional<std::size_t>  input_buffer_size() const { return std::nullopt; }
@@ -78,7 +86,7 @@ namespace ext::stream_filtering
 	
 	
 	/// traits for calling filter, so this lib be able to work not only with this filter interface.
-	template <class Filter, class = void>
+	template <class Filter, class = std::void_t<>>
 	struct filter_traits;
 	
 	template <class Filter>
@@ -90,8 +98,8 @@ namespace ext::stream_filtering
 		}
 	};
 	
-	template <>
-	struct filter_traits<filter>
+	template <class Filter>
+	struct filter_traits<Filter, std::void_t<std::enable_if_t<std::is_base_of_v<filter, Filter>>>>
 	{
 		inline static auto call(filter & filter, const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool eos)
 			-> std::tuple<std::size_t, std::size_t, bool>
@@ -110,18 +118,19 @@ namespace ext::stream_filtering
 		}
 	};
 	
-	//template <template <class> class SmartPointer, class Filter>
-	//struct filter_traits<SmartPointer<Filter>>
-	//{
-	//	inline static auto call(SmartPointer<Filter> & filter_ptr, const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool eos)
-	//		-> std::tuple<std::size_t, std::size_t, bool>
-	//	{
-	//		return filter_traits<Filter>::call(*filter_ptr, input, inputsz, output, outputsz, eos);
-	//	}
-	//};
+	// TODO: specialization should be somehow more precize
+	template <template <class> class SmartPointer, class Filter>
+	struct filter_traits<SmartPointer<Filter>>
+	{
+		inline static auto call(SmartPointer<Filter> & filter_ptr, const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool eos)
+			-> std::tuple<std::size_t, std::size_t, bool>
+		{
+			return filter_traits<Filter>::call(*filter_ptr, input, inputsz, output, outputsz, eos);
+		}
+	};
 	
 	
-	constexpr void preprocess_processing_paramers(processing_parameters & par)
+	constexpr void preprocess_processing_parameters(processing_parameters & par)
 	{
 		if (par.default_buffer_size == 0) par.default_buffer_size = impldef_default_buffer_size;
 		if (par.maximum_buffer_size == 0) par.maximum_buffer_size = impldef_maximum_buffer_size;

@@ -65,6 +65,16 @@ namespace ext::stream_filtering
 				zlib::throw_zlib_error(res, m_deflator);
 		}
 	}
+	
+	void zlib_inflate_filter::reset()
+	{
+		m_inflator.reset();
+	}
+	
+	void zlib_deflate_filter::reset()
+	{
+		m_deflator.reset();
+	}
 }
 
 #endif
