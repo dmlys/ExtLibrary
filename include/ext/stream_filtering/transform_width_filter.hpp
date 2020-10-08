@@ -103,7 +103,8 @@ namespace ext::stream_filtering
 			read += toread, written += stopped - output;
 			
 			assert(m_inputBufferSize == 0 and m_outputBufferSize == 0);
-			return std::make_tuple(read, written, eos and read == inputsz);
+			return std::make_tuple(read, written, eos and read >= inputsz);
+			// we can read more than inputsz(read >= inputsz) if we had some trailing input in internal buffer
 		}
 		
 		// If we do not wrote anything, and there are not even 1 full input group to consume -
@@ -117,7 +118,7 @@ namespace ext::stream_filtering
 		}
 		
 		assert((read or written) or (inputsz == 0 or outputsz == 0));
-		// we are finished if and only if there is now input left and we do not have accumulated input in any form
+		// we are finished if and only if there is no input left and we do not have accumulated input in any form
 		eos &= inputsz == 0 and m_inputBufferSize == 0 and m_outputBufferSize == 0;
 		return std::make_tuple(read, written, eos);
 	}
