@@ -61,7 +61,7 @@ namespace ext::stream_filtering
 		// if we have some trailing output - write it
 		if (m_outputBufferSize != 0) write_trailing_output:
 		{
-			assert(m_inputBufferSize == 0);
+			assert(m_inputBufferSize == 0); // Is this assert correct?
 			auto n = std::min<std::size_t>(m_outputBufferSize, outputsz);
 			auto * stopped = std::copy_n(output_buffer + m_outputBufferConsumed, n, output);
 			written = stopped - output, output += written, outputsz -= written, m_outputBufferConsumed += written, m_outputBufferSize -= n;

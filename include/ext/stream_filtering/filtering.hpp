@@ -93,6 +93,15 @@ namespace ext::stream_filtering
 		//unsigned one_fifth = capacity / 5 + (capacity % 5 ? 1 : 0);
 		//return std::max(1u, capacity - one_fifth);
 	}
+	
+	/// \internal
+	/// calculates threshold for determine if buffer is empty
+	/// basically buffer is empty if it's size is 20% of capacity
+	constexpr inline unsigned emptybuffer_threshold(unsigned capacity) noexcept
+	{
+		//return capacity - fullbuffer_threshold(capacity);
+		return capacity / 5 + (capacity % 5 ? 1 : 0);
+	}
 
 	/// \internal
 	/// calculates threshold for determine if buffer is full
@@ -101,6 +110,15 @@ namespace ext::stream_filtering
 	{
 		//return capacity / par.full_threshold_part + (capacity % par.full_threshold_part ? 1 : 0);
 		return fullbuffer_threshold(capacity);
+	}
+	
+	/// \internal
+	/// calculates threshold for determine if buffer is empty
+	/// basically buffer is empty if it's size is 20% of capacity
+	constexpr inline unsigned emptybuffer_threshold(unsigned capacity, const processing_parameters & par) noexcept
+	{
+		//return capacity / par.full_threshold_part + (capacity % par.full_threshold_part ? 1 : 0);
+		return emptybuffer_threshold(capacity);
 	}
 	
 	/// \internal
