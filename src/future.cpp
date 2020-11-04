@@ -33,7 +33,7 @@ namespace ext
 	const std::error_category & future_category() { return future_errc_category_instance; }
 
 	future_error::future_error(const std::error_code & ec) noexcept
-		: std::logic_error("future_error"), m_err(ec) { }
+		: std::logic_error(ec.message()), m_err(ec) { }
 
 	const char * future_error::what() const noexcept
 	{
