@@ -46,6 +46,9 @@ namespace ext::stream_filtering
 		// for future implementation
 		//virtual std::optional<std::size_t>  input_buffer_size() const { return std::nullopt; }
 		//virtual std::optional<std::size_t> output_buffer_size() const { return std::nullopt; }
+		
+	public:
+		virtual ~filter() = default;
 	};
 	
 	/// filter processing parameters, currently buffer sizes.
