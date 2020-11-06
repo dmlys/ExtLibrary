@@ -95,9 +95,12 @@ namespace ext::stream_filtering
 		
 		// we are finishing and have enough space for whole output - just process all at once
 		if (eos and towrite + OutputGroupSize <= outputsz)
+		{
 			toread = inputsz;
+			goto main_write;
+		}
 		
-		if (ngroups)
+		if (ngroups) main_write:
 		{
 			auto * stopped = process_some(input, input + toread, output);
 			read += toread, written += stopped - output;
