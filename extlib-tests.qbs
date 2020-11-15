@@ -32,6 +32,10 @@ CppApplication
 		if (extlib.with_zlib)
 			libs.push("z")
 		
+		if (extlib.with_openssl)
+			libs = libs.concat(["crypto"])
+			//libs = libs.concat(["ssl", "crypto"])
+		
 		if (qbs.toolchain.contains("mingw"))
 			libs.push("ssp") // for mingw(gcc) stack protector, _FORTIFY_SOURCE stuff
 		

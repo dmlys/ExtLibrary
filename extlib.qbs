@@ -5,6 +5,7 @@ import qbs.Environment
 Project
 {
 	property bool with_zlib: false
+	property bool with_openssl: false
 
 	StaticLibrary
 	{
@@ -25,6 +26,9 @@ Project
 			if (project.with_zlib)
 				defines.push("EXT_ENABLE_CPPZLIB")
 
+			if (project.with_openssl)
+				defines.push("EXT_ENABLE_OPENSSL")
+			
 			if (project.additionalDefines)
 				defines = defines.uniqueConcat(project.additionalDefines)
 
@@ -34,6 +38,7 @@ Project
 		Export
 		{
 			property bool with_zlib: project.with_zlib
+			property bool with_openssl: project.with_openssl
 			
 			Depends { name: "cpp" }
 			cpp.cxxLanguageVersion : "c++17"
@@ -44,6 +49,9 @@ Project
 
 				if (project.with_zlib)
 					defines.push("EXT_ENABLE_CPPZLIB")
+				
+				if (project.with_openssl)
+					defines.push("EXT_ENABLE_OPENSSL")
 
 				return defines;
 			}
