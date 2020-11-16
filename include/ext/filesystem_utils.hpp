@@ -11,7 +11,7 @@
 #include <boost/predef.h>
 
 #if BOOST_OS_WINDOWS
-#include <codecvt>
+#include <ext/codecvt_conv/wincvt.hpp>
 #include <ext/codecvt_conv/generic_conv.hpp>
 #endif
 
@@ -21,6 +21,16 @@
 
 namespace ext
 {
+	namespace filesystem_utils_detail
+	{
+#if BOOST_OS_WINDOWS
+		inline auto * to_utf8(const char * str)    { return str; }
+		inline auto   to_utf8(const wchar_t * str) { return ext::codecvt_convert::to_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(str)); }
+#else
+		inline auto * to_utf8(const char * str)    { return str; }
+#endif
+	}
+	
 	/// данный класс-предикат предназначен для фильтрации коллекций
 	/// boost.filesystem.path / boost.filesystem.directory_entry по заданному регекс выражению
 	struct fsmask
@@ -70,12 +80,13 @@ namespace ext
 	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
 	{
 		static_assert(ext::is_container_of_v<Container, char>, "not a char container");
+		auto u8_path = filesystem_utils_detail::to_utf8(path);
 
 		std::ifstream ifs(path, mode);
 		if (!ifs.is_open())
 		{
 			//      "Failed to open {1}, {2}
-			reps << "Failed to open " << path << ", " << ext::format_errno(errno) << std::endl;
+			reps << "Failed to open " << u8_path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 
@@ -95,7 +106,7 @@ namespace ext
 		catch (std::bad_alloc &)
 		{
 			// "Failed to read {1}, file to big, size is {2,num}
-			reps << "Failed to read " << path << ", file to big, size is " << fileSize << std::endl;
+			reps << "Failed to read " << u8_path << ", file to big, size is " << fileSize << std::endl;
 			return false;
 		}
 
@@ -103,7 +114,7 @@ namespace ext
 		if (ifs.bad())
 		{
 			// "Failed to read {1}, {2}
-			reps << "Failed to read " << path << ", " << ext::format_errno(errno) << std::endl;
+			reps << "Failed to read " << u8_path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 
@@ -118,11 +129,13 @@ namespace ext
 	bool write_file(const std::filesystem::path::value_type * path, const Container & content, std::ostream & reps,
 	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
 	{
+		auto u8_path = filesystem_utils_detail::to_utf8(path);
+		
 		std::ofstream ofs(path, mode);
 		if (!ofs.is_open())
 		{
 			//      "Failed to open {1}, {2}
-			reps << "Failed to open " << path << ", " << ext::format_errno(errno) << std::endl;
+			reps << "Failed to open " << u8_path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 		
@@ -130,7 +143,7 @@ namespace ext
 		if (ofs.bad())
 		{
 			// "Failed to read {1}, {2}
-			reps << "Failed to write " << path << ", " << ext::format_errno(errno) << std::endl;
+			reps << "Failed to write " << u8_path << ", " << ext::format_errno(errno) << std::endl;
 			return false;
 		}
 		
@@ -142,8 +155,7 @@ namespace ext
 	bool read_file(const char * path, Container & content, std::ostream & reps,
 	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
 	{
-		const std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> u8_cvt;
-		std::wstring wstr = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		std::wstring wstr = ext::codecvt_convert::from_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(path));
 		return read_file(wstr.c_str(), content, reps, mode);
 	}
 
@@ -151,8 +163,7 @@ namespace ext
 	bool write_file(const char * path, const Container & content, std::ostream & resp,
 	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
 	{
-		const std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> u8_cvt;
-		std::wstring wstr = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		std::wstring wstr = ext::codecvt_convert::from_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(path));
 		return write_file(wstr.c_str(), content, resp, mode);
 	}
 #endif

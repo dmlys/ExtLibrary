@@ -26,7 +26,7 @@ namespace
 
 	struct CodecvtFixture
 	{
-		std::codecvt_utf8<wchar_t> utf8;
+		std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> utf8;
 		CodeCvtByName cp1251;
 		CodeCvtByName cp1252;
 
