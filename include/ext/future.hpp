@@ -1262,8 +1262,8 @@ namespace ext
 		using waiter_ptr = ext::intrusive_ptr<ext::continuation_waiter>;
 
 	public:
-		virtual bool take(waiter_ptr & ptr) = 0;
-		virtual bool putback(waiter_ptr & ptr) = 0;
+		virtual void take(waiter_ptr & ptr) = 0;
+		virtual void putback(waiter_ptr & ptr) = 0;
 		virtual bool used() const noexcept = 0;
 
 		virtual ~continuation_waiters_pool() = default;

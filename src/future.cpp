@@ -590,32 +590,31 @@ namespace ext
 		std::atomic_uint m_usecount = ATOMIC_VAR_INIT(0);
 
 	public:
-		bool take(waiter_ptr & ptr) override;
-		bool putback(waiter_ptr & ptr) override;
+		void take(waiter_ptr & ptr) override;
+		void putback(waiter_ptr & ptr) override;
 		bool used() const noexcept override { return m_usecount.load(std::memory_order_relaxed); }
 	};
 
-	bool default_continuation_waiters_pool::take(waiter_ptr & ptr)
+	void default_continuation_waiters_pool::take(waiter_ptr & ptr)
 	{
 		ptr = ext::make_intrusive<ext::continuation_waiter_impl>();
 		m_usecount.fetch_add(1, std::memory_order_relaxed);
-		return true;
 	}
 
-	bool default_continuation_waiters_pool::putback(waiter_ptr & ptr)
+	void default_continuation_waiters_pool::putback(waiter_ptr & ptr)
 	{
 		ptr = nullptr;
 		m_usecount.fetch_sub(1, std::memory_order_relaxed);
-		return true;
 	}
 
 
-	class lockfree_continuation_pool : public continuation_waiters_pool
+	class arena_continuation_pool : public continuation_waiters_pool
 	{
 	protected:
 		std::atomic<std::size_t> m_first_avail;
 		std::atomic<std::size_t> m_last_avail;
 		std::atomic<std::size_t> m_first_free;
+		std::atomic<std::size_t> m_usecount = 0;
 		
 		std::vector<waiter_ptr> m_objects;
 	
@@ -624,19 +623,19 @@ namespace ext
 		void free();
 	
 	public:
-		bool take(waiter_ptr & ptr) noexcept override;
-		bool putback(waiter_ptr & ptr) noexcept override;
+		void take(waiter_ptr & ptr) noexcept override;
+		void putback(waiter_ptr & ptr) noexcept override;
 		bool used() const noexcept override;
 	
 	public:
-		lockfree_continuation_pool(std::size_t num) { init(num); }
-		~lockfree_continuation_pool() { free(); }
+		arena_continuation_pool(std::size_t num) { init(num); }
+		~arena_continuation_pool() { free(); }
 
 	protected:
-		lockfree_continuation_pool() = default;
+		arena_continuation_pool() = default;
 	};
 	
-	void lockfree_continuation_pool::init(std::size_t num)
+	void arena_continuation_pool::init(std::size_t num)
 	{
 		m_objects.resize(num);
 		for (auto & val : m_objects)
@@ -651,14 +650,14 @@ namespace ext
 		m_first_free.store(0, std::memory_order_relaxed);
 	}
 	
-	void lockfree_continuation_pool::free()
+	void arena_continuation_pool::free()
 	{
 		// all objects are in the pool
 		assert(m_first_avail == m_first_free);
 		m_objects.clear();
 	}
 
-	bool lockfree_continuation_pool::take(waiter_ptr & ptr) noexcept
+	void arena_continuation_pool::take(waiter_ptr & ptr) noexcept
 	{
 		std::size_t first, last, new_first;
 		std::size_t sz = m_objects.size();
@@ -667,21 +666,26 @@ namespace ext
 			last = m_last_avail.load(std::memory_order_relaxed);
 			new_first = (first + 1) % sz;
 	
-			if (new_first == last) return false;
+			if (new_first == last)
+			{
+				//throw std::runtime_error("ext::future: waiter pool exhausted, see init_future_library");
+				ptr = ext::make_intrusive<ext::continuation_waiter_impl>();
+				m_usecount.fetch_add(1, std::memory_order_relaxed);
+				return;
+			}
 	
 		} while (not m_first_avail.compare_exchange_weak(first, new_first, std::memory_order_acquire, std::memory_order_relaxed));
 		
 		// successfully taken element, now move it
 		ptr = std::move(m_objects[first]);
-		return true;
 	}
 
-	bool lockfree_continuation_pool::used() const noexcept
+	bool arena_continuation_pool::used() const noexcept
 	{
-		return m_last_avail.load(std::memory_order_relaxed) != m_first_free.load(std::memory_order_relaxed);
+		return m_last_avail.load(std::memory_order_relaxed) != m_first_free.load(std::memory_order_relaxed) or m_usecount.load(std::memory_order_relaxed);;
 	}
 
-	bool lockfree_continuation_pool::putback(waiter_ptr & ptr) noexcept
+	void arena_continuation_pool::putback(waiter_ptr & ptr) noexcept
 	{
 		std::size_t first_avail, first_free, new_free;
 		std::size_t sz = m_objects.size();
@@ -693,7 +697,12 @@ namespace ext
 			new_free = (first_free + 1) % sz;
 	
 			// pool is full, actually this should not happen
-			if (first_free == first_avail) return false;
+			if (first_free == first_avail)
+			{
+				ptr.release();
+				m_usecount.fetch_sub(1, std::memory_order_relaxed);
+				return;
+			}
 		
 		} while(not m_first_free.compare_exchange_weak(first_free, new_free, std::memory_order_relaxed));
 		
@@ -705,8 +714,6 @@ namespace ext
 		// This is somewhat ugly, and produce waiting, for now i think it would suffice.
 		while (not m_last_avail.compare_exchange_weak(first_free, new_free, std::memory_order_release))
 			backoff();
-		
-		return true;
 	}
 
 	// global object pool of continuation_waiters.
@@ -758,7 +765,7 @@ namespace ext
 			return true;
 		}
 		
-		g_pool = new lockfree_continuation_pool(waiter_slots);
+		g_pool = new arena_continuation_pool(waiter_slots);
 		return true;
 	}
 
