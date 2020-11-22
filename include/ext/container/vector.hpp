@@ -6,6 +6,7 @@
 
 #include <type_traits>
 #include <initializer_list>
+#include <stdexcept> // for std::out_of_range/length_error
 #include <utility>   // for std::exchange
 #include <tuple>     // for std::tie
 #include <iterator>  // for reverse_iterator
@@ -105,12 +106,12 @@ namespace ext::container
 		static constexpr pointer extract_pointer(      iterator it) noexcept { return it.base(); }
 
 	private:
-		auto allocate(allocator_type & alloc, size_type cap, const_pointer hint) -> std::pair<pointer, pointer>;
-		void deallocate(allocator_type & alloc, pointer ptr, size_type cap) noexcept;
-		auto allocate_adjusted(allocator_type & alloc, size_type curcap, size_type newcap, const_pointer hint) -> std::pair<pointer, pointer>;
+		static auto allocate(allocator_type & alloc, size_type cap, const_pointer hint) -> std::pair<pointer, pointer>;
+		static void deallocate(allocator_type & alloc, pointer ptr, size_type cap) noexcept;
+		static auto allocate_adjusted(allocator_type & alloc, size_type curcap, size_type newcap, const_pointer hint) -> std::pair<pointer, pointer>;
 
-		auto checked_allocate_adjusted(allocator_type & alloc, size_type curcap, size_type newsize, const_pointer hint) -> std::pair<pointer, pointer>;
-		auto checked_allocate_adjusted(allocator_type & alloc, size_type curcap, size_type cursize, size_type increment, const_pointer hint) -> std::pair<pointer, pointer>;
+		static auto checked_allocate_adjusted(allocator_type & alloc, size_type curcap, size_type newsize, const_pointer hint) -> std::pair<pointer, pointer>;
+		static auto checked_allocate_adjusted(allocator_type & alloc, size_type curcap, size_type cursize, size_type increment, const_pointer hint) -> std::pair<pointer, pointer>;
 
 	private:
 		template <class Iterator>
@@ -314,7 +315,7 @@ namespace ext::container
 	{
 		decltype(auto) alloc = allocator();
 
-		destroy(alloc, m_first, m_last);
+		ext::container::destroy(alloc, m_first, m_last);
 		deallocate(alloc, m_first, m_storage_end - m_first);
 	}
 
@@ -345,7 +346,7 @@ namespace ext::container
 
 		try
 		{
-			newlast = uninitialized_copy(alloc, first, last, newfirst);
+			newlast = ext::container::uninitialized_copy(alloc, first, last, newfirst);
 		}
 		catch (...)
 		{
@@ -372,7 +373,7 @@ namespace ext::container
 			    {
 				    pointer first, last, end;
 				    std::tie(first, last, end) = get_storage_pointers();
-				    destroy(this_alloc, first, last);
+				    ext::container::destroy(this_alloc, first, last);
 				    deallocate(this_alloc, first, last - first);
 				    first = last = end = nullptr;
 				    set_storage_pointers({first, last, end});
@@ -413,7 +414,7 @@ namespace ext::container
 				std::tie(first, last, end) = other.get_storage_pointers();
 				assign(std::make_move_iterator(first), std::make_move_iterator(first));
 
-				destroy(other_alloc, first, last);
+				ext::container::destroy(other_alloc, first, last);
 				other.deallocate(other_alloc, first, last - first);
 				other.set_storage_pointers({nullptr, nullptr, nullptr});
 			}
@@ -448,7 +449,7 @@ namespace ext::container
 					std::tie(first, last, end) = other.get_storage_pointers();
 					assign(std::make_move_iterator(first), std::make_move_iterator(first));
 
-					destroy(other_alloc, first, last);
+					ext::container::destroy(other_alloc, first, last);
 					other.deallocate(other_alloc, first, last - first);
 					other.set_storage_pointers({nullptr, nullptr, nullptr});
 
@@ -470,7 +471,7 @@ namespace ext::container
 		decltype(auto) alloc = allocator();
 
 		assert(m_first < m_last);
-		destroy_at(alloc, m_last);
+		ext::container::destroy_at(alloc, m_last);
 		m_last -= 1;
 	}
 
@@ -493,7 +494,7 @@ namespace ext::container
 		{
 			newfirst = first;
 			newend = end;
-			construct(alloc, last, std::forward<Args>(args)...);
+			ext::container::construct(alloc, last, std::forward<Args>(args)...);
 			newlast = last + 1;
 		}
 		else
@@ -503,20 +504,20 @@ namespace ext::container
 
 			try
 			{
-				construct(alloc, newfirst + size, std::forward<Args>(args)...);
+				ext::container::construct(alloc, newfirst + size, std::forward<Args>(args)...);
 				newlast += 1;
 
-				uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
+				ext::container::uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
 			}
 			catch (...)
 			{
 				// destroy already constructed elements if there any
-				if (newlast > newfirst + size) destroy_at(alloc, newfirst + size);
+				if (newlast > newfirst + size) ext::container::destroy_at(alloc, newfirst + size);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy_n(alloc, first, size);
+			ext::container::destroy_n(alloc, first, size);
 			deallocate(alloc, first, capacity);
 		}
 
@@ -547,10 +548,10 @@ namespace ext::container
 			newfirst = first, newlast = last, newend = end;
 
 			if (last == position)
-				construct(alloc, newlast++, std::forward<Args>(args)...);
+				ext::container::construct(alloc, newlast++, std::forward<Args>(args)...);
 			else
 			{
-				construct(alloc, newlast++, std::move(*std::prev(last)));
+				ext::container::construct(alloc, newlast++, std::move(*std::prev(last)));
 				std::move_backward(position, std::prev(last), last);
 				*position = value_type(std::forward<Args>(args)...);
 			}
@@ -563,18 +564,18 @@ namespace ext::container
 
 			try
 			{
-				newlast = uninitialized_move_if_noexcept(alloc, first, position, newfirst);
-				construct(alloc, newlast++, std::forward<Args>(args)...);
-				newlast = uninitialized_move_if_noexcept(alloc, position, last, newlast);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, first, position, newfirst);
+				ext::container::construct(alloc, newlast++, std::forward<Args>(args)...);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, position, last, newlast);
 			}
 			catch (...)
 			{
-				destroy(alloc, newfirst, newlast);
+				ext::container::destroy(alloc, newfirst, newlast);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy(alloc, first, last);
+			ext::container::destroy(alloc, first, last);
 			deallocate(alloc, first, capacity);
 
 			set_storage_pointers({newfirst, newlast, newend});
@@ -619,7 +620,7 @@ namespace ext::container
 
 		try
 		{
-			uninitialized_move_if_noexcept(alloc, first, last, newfirst);
+			ext::container::uninitialized_move_if_noexcept(alloc, first, last, newfirst);
 		}
 		catch (...)
 		{
@@ -627,7 +628,7 @@ namespace ext::container
 			throw;
 		}
 
-		destroy(alloc, first, last);
+		ext::container::destroy(alloc, first, last);
 		deallocate(alloc, first, capacity);
 
 		set_storage_pointers({newfirst, newlast, newend});
@@ -651,7 +652,7 @@ namespace ext::container
 
 		try
 		{
-			uninitialized_move_if_noexcept(alloc, first, last, newfirst);
+			ext::container::uninitialized_move_if_noexcept(alloc, first, last, newfirst);
 		}
 		catch (...)
 		{
@@ -659,7 +660,7 @@ namespace ext::container
 			throw;
 		}
 
-		destroy(alloc, first, last);
+		ext::container::destroy(alloc, first, last);
 		deallocate(alloc, first, capacity);
 
 		set_storage_pointers({newfirst, newlast, newend});
@@ -680,7 +681,7 @@ namespace ext::container
 
 		if (size > n)
 		{
-			destroy(alloc, first + n, last);
+			ext::container::destroy(alloc, first + n, last);
 			set_storage_pointers({first, last, end});
 		}
 		else if (size < n)
@@ -689,7 +690,7 @@ namespace ext::container
 			if (avail >= n and use_relloc())
 			{
 				newfirst = first, newlast = last, newend = end;
-				newlast = uninitialized_construct_n(alloc, default_constructor(), last, n);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::default_constructor(), last, n);
 			}
 			else
 			{
@@ -700,20 +701,20 @@ namespace ext::container
 
 				try
 				{
-					uninitialized_construct_n(alloc, default_constructor(), newfirst + size, n);
+					ext::container::uninitialized_construct_n(alloc, ext::container::default_constructor(), newfirst + size, n);
 					destroy_from = newfirst + size;
 
-					uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
+					ext::container::uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
 				}
 				catch (...)
 				{
 					// destroy already constructed elements if there any
-					if (destroy_from) destroy_n(alloc, destroy_from, n);
+					if (destroy_from) ext::container::destroy_n(alloc, destroy_from, n);
 					deallocate(alloc, newfirst, newend - newfirst);
 					throw;
 				}
 
-				destroy_n(alloc, first, size);
+				ext::container::destroy_n(alloc, first, size);
 				deallocate(alloc, first, capacity);
 			}
 
@@ -737,7 +738,7 @@ namespace ext::container
 
 		if (size > n)
 		{
-			destroy(alloc, first + n, last);
+			ext::container::destroy(alloc, first + n, last);
 			set_storage_pointers({first, last, end});
 		}
 		else
@@ -746,7 +747,7 @@ namespace ext::container
 			if (avail >= n)
 			{
 				newfirst = first, newlast = last, newend = end;
-				newlast = uninitialized_construct_n(alloc, fill_constructor(val), last, n);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), last, n);
 			}
 			else
 			{
@@ -757,20 +758,20 @@ namespace ext::container
 
 				try
 				{
-					uninitialized_construct_n(alloc, fill_constructor(val), newfirst + size, n);
+					ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), newfirst + size, n);
 					destroy_from = newfirst + size;
 
-					uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
+					ext::container::uninitialized_move_if_noexcept_n(alloc, first, size, newfirst);
 				}
 				catch (...)
 				{
 					// destroy already constructed elements if there any
-					if (destroy_from) destroy_n(alloc, destroy_from, n);
+					if (destroy_from) ext::container::destroy_n(alloc, destroy_from, n);
 					deallocate(alloc, newfirst, newend - newfirst);
 					throw;
 				}
 
-				destroy_n(alloc, first, size);
+				ext::container::destroy_n(alloc, first, size);
 				deallocate(alloc, first, capacity);
 			}
 
@@ -808,14 +809,14 @@ namespace ext::container
 
 			if (after_count > insert_count)
 			{
-				newlast = uninitialized_move_if_noexcept(alloc, last - insert_count, last, last);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, last - insert_count, last, last);
 				std::move_backward(position, last - insert_count, last);
 				std::fill_n(position, insert_count, val);
 			}
 			else
 			{
-				newlast = uninitialized_construct_n(alloc, fill_constructor(val), last, insert_count - after_count);
-				newlast = uninitialized_move_if_noexcept(alloc, position, last, newlast);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), last, insert_count - after_count);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, position, last, newlast);
 				std::fill_n(position, after_count, val);
 			}
 		}
@@ -827,18 +828,18 @@ namespace ext::container
 
 			try
 			{
-				newlast = uninitialized_move_if_noexcept(alloc, first, position, newfirst);
-				newlast = uninitialized_construct_n(alloc, fill_constructor(val), newlast, insert_count);
-				newlast = uninitialized_move_if_noexcept(alloc, position, last, newlast);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, first, position, newfirst);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), newlast, insert_count);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, position, last, newlast);
 			}
 			catch (...)
 			{
-				destroy(alloc, newfirst, newlast);
+				ext::container::destroy(alloc, newfirst, newlast);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy(alloc, first, last);
+			ext::container::destroy(alloc, first, last);
 			deallocate(alloc, first, capacity);
 
 			set_storage_pointers({newfirst, newlast, newend});
@@ -884,15 +885,15 @@ namespace ext::container
 
 			if (after_count > insert_count)
 			{
-				newlast = uninitialized_move_if_noexcept(alloc, last - insert_count, last, last);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, last - insert_count, last, last);
 				std::move_backward(position, last - insert_count, last);
 				std::copy(insert_first, insert_last, position);
 			}
 			else
 			{
 				Iterator insert_mid = std::next(insert_first, after_count);
-				newlast = uninitialized_copy(alloc, insert_mid, insert_last, last);
-				newlast = uninitialized_move_if_noexcept(alloc, position, last, newlast);
+				newlast = ext::container::uninitialized_copy(alloc, insert_mid, insert_last, last);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, position, last, newlast);
 				std::copy(insert_first, insert_mid, position);
 			}
 		}
@@ -904,18 +905,18 @@ namespace ext::container
 
 			try
 			{
-				newlast = uninitialized_move_if_noexcept(alloc, first, position, newfirst);
-				newlast = uninitialized_copy(alloc, insert_first, insert_last, newlast);
-				newlast = uninitialized_move_if_noexcept(alloc, position, last, newlast);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, first, position, newfirst);
+				newlast = ext::container::uninitialized_copy(alloc, insert_first, insert_last, newlast);
+				newlast = ext::container::uninitialized_move_if_noexcept(alloc, position, last, newlast);
 			}
 			catch (...)
 			{
-				destroy(alloc, newfirst, newlast);
+				ext::container::destroy(alloc, newfirst, newlast);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy(alloc, first, last);
+			ext::container::destroy(alloc, first, last);
 			deallocate(alloc, first, capacity);
 
 			set_storage_pointers({newfirst, newlast, newend});
@@ -949,12 +950,12 @@ namespace ext::container
 			if (assign_count >= size)
 			{
 				newlast = std::fill_n(newfirst, size, val);
-				newlast = uninitialized_construct_n(alloc, fill_constructor(val), newlast, assign_count - size);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), newlast, assign_count - size);
 			}
 			else
 			{
 				newlast = std::fill_n(newfirst, assign_count, val);
-				destroy(alloc, newlast, last);
+				ext::container::destroy(alloc, newlast, last);
 			}
 		}
 		else
@@ -964,16 +965,16 @@ namespace ext::container
 
 			try
 			{
-				newlast = uninitialized_construct_n(alloc, fill_constructor(val), newfirst, assign_count);
+				newlast = ext::container::uninitialized_construct_n(alloc, ext::container::fill_constructor(val), newfirst, assign_count);
 			}
 			catch (...)
 			{
-				destroy(alloc, newfirst, newlast);
+				ext::container::destroy(alloc, newfirst, newlast);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy(alloc, first, last);
+			ext::container::destroy(alloc, first, last);
 			deallocate(alloc, first, capacity);
 
 			set_storage_pointers({newfirst, newlast, newend});
@@ -993,7 +994,7 @@ namespace ext::container
 
 		if (assign_first == assign_last)
 		{
-			destroy(alloc, cur, last);
+			ext::container::destroy(alloc, cur, last);
 			set_storage_pointers({first, cur, end});
 		}
 		else
@@ -1025,12 +1026,12 @@ namespace ext::container
 			if (assign_count >= size)
 			{
 				newlast = std::copy_n(assign_first, size, newfirst);
-				newlast = uninitialized_copy_n(alloc, std::next(assign_first, size), assign_count - size, newlast);
+				newlast = ext::container::uninitialized_copy_n(alloc, std::next(assign_first, size), assign_count - size, newlast);
 			}
 			else
 			{
 				newlast = std::copy_n(assign_first, assign_count, newfirst);
-				destroy(alloc, newlast, last);
+				ext::container::destroy(alloc, newlast, last);
 			}
 		}
 		else
@@ -1040,16 +1041,16 @@ namespace ext::container
 
 			try
 			{
-				newlast = uninitialized_copy(alloc, assign_first, assign_last, newfirst);
+				newlast = ext::container::uninitialized_copy(alloc, assign_first, assign_last, newfirst);
 			}
 			catch (...)
 			{
-				destroy(alloc, newfirst, newlast);
+				ext::container::destroy(alloc, newfirst, newlast);
 				deallocate(alloc, newfirst, newend - newfirst);
 				throw;
 			}
 
-			destroy(alloc, first, last);
+			ext::container::destroy(alloc, first, last);
 			deallocate(alloc, first, capacity);
 
 			set_storage_pointers({newfirst, newlast, newend});
@@ -1069,7 +1070,7 @@ namespace ext::container
 		size_type erase_count = std::distance(erase_first, erase_last);
 
 		last = std::move(extract_pointer(erase_last), last, extract_pointer(erase_first));
-		destroy_n(alloc, last, erase_count);
+		ext::container::destroy_n(alloc, last, erase_count);
 
 		set_storage_pointers({first, last, end});
 		return make_iterator(erase_first);
@@ -1083,7 +1084,7 @@ namespace ext::container
 		decltype(auto) alloc = allocator();
 
 		last = std::move(extract_pointer(where) + 1, last, extract_pointer(where));
-		destroy_at(alloc, std::addressof(*last));
+		ext::container::destroy_at(alloc, std::addressof(*last));
 
 		set_storage_pointers({first, last, end});
 		return make_iterator(where);
