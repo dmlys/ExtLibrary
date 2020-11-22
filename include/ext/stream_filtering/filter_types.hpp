@@ -122,8 +122,8 @@ namespace ext::stream_filtering
 	};
 	
 	// TODO: specialization should be somehow more precize
-	template <template <class> class SmartPointer, class Filter>
-	struct filter_traits<SmartPointer<Filter>>
+	template <template <class...> class SmartPointer, class Filter, class ... Rest>
+	struct filter_traits<SmartPointer<Filter, Rest...>>
 	{
 		inline static auto call(SmartPointer<Filter> & filter_ptr, const char * input, std::size_t inputsz, char * output, std::size_t outputsz, bool eos)
 			-> std::tuple<std::size_t, std::size_t, bool>
