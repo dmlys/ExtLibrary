@@ -2,6 +2,7 @@
 #include <locale>
 #include <tuple>
 #include <string_view>
+#include <boost/predef.h>
 #include <boost/locale/collator.hpp>
 
 #include <ext/range/str_view.hpp>
@@ -111,10 +112,17 @@ namespace ext::natural_order
 		boost::locale::collator_base::level_type m_compare_level = boost::locale::collator_base::identical;
 
 		std::tuple<
-			result_type (localized_char_traits::*)(const char     * s1_first, const char     * s1_last, const char     * s2_first, const char     * s2_last) const,
-			result_type (localized_char_traits::*)(const wchar_t  * s1_first, const wchar_t  * s1_last, const wchar_t  * s2_first, const wchar_t  * s2_last) const,
-			result_type (localized_char_traits::*)(const char16_t * s1_first, const char16_t * s1_last, const char16_t * s2_first, const char16_t * s2_last) const,
-			result_type (localized_char_traits::*)(const char32_t * s1_first, const char32_t * s1_last, const char32_t * s2_first, const char32_t * s2_last) const
+			  result_type (localized_char_traits::*)(const char     * s1_first, const char     * s1_last, const char     * s2_first, const char     * s2_last) const
+			, result_type (localized_char_traits::*)(const wchar_t  * s1_first, const wchar_t  * s1_last, const wchar_t  * s2_first, const wchar_t  * s2_last) const
+		// on msvc std lib does likes locales for char16_t, char32_t :(
+		// locale(126): warning C4273: 'id': inconsistent dll linkage
+		// error C2491: 'std::collate<CharType>::id': definition of dllimport static data member not allowed
+		// https://social.msdn.microsoft.com/Forums/en-US/3e1d37a5-0b50-41fe-ac18-2b4db5e1262b/compile-error-for-stl-stream-containers-in-visual-studio?forum=vcgeneral
+		// maybe static linkage of stdlib would work?
+		#if not BOOST_LIB_STD_DINKUMWARE
+			, result_type (localized_char_traits::*)(const char16_t * s1_first, const char16_t * s1_last, const char16_t * s2_first, const char16_t * s2_last) const
+			, result_type (localized_char_traits::*)(const char32_t * s1_first, const char32_t * s1_last, const char32_t * s2_first, const char32_t * s2_last) const
+		#endif
 		> m_methods;
 
 	private:
@@ -134,10 +142,12 @@ namespace ext::natural_order
 	    : m_loc(loc)
 	{
 		m_methods = std::make_tuple(
-			&localized_char_traits::std_compare<char>,
-			&localized_char_traits::std_compare<wchar_t>,
-	        &localized_char_traits::std_compare<char16_t>,
-            &localized_char_traits::std_compare<char32_t>
+			  &localized_char_traits::std_compare<char>
+			, &localized_char_traits::std_compare<wchar_t>
+		#if not BOOST_LIB_STD_DINKUMWARE
+	        , &localized_char_traits::std_compare<char16_t>
+            , &localized_char_traits::std_compare<char32_t>
+		#endif
 		);
 	}
 
@@ -147,19 +157,23 @@ namespace ext::natural_order
 		if (m_compare_level == boost::locale::collator_base::identical)
 		{
 			m_methods = std::make_tuple(
-				&localized_char_traits::std_compare<char>,
-				&localized_char_traits::std_compare<wchar_t>,
-		        &localized_char_traits::std_compare<char16_t>,
-	            &localized_char_traits::std_compare<char32_t>
+				  &localized_char_traits::std_compare<char>
+				, &localized_char_traits::std_compare<wchar_t>
+			#if not BOOST_LIB_STD_DINKUMWARE
+		        , &localized_char_traits::std_compare<char16_t>
+	            , &localized_char_traits::std_compare<char32_t>
+			#endif
 			);
 		}
 		else
 		{
 			m_methods = std::make_tuple(
-				&localized_char_traits::boost_compare<char>,
-				&localized_char_traits::boost_compare<wchar_t>,
-		        &localized_char_traits::boost_compare<char16_t>,
-	            &localized_char_traits::boost_compare<char32_t>
+				  &localized_char_traits::std_compare<char>
+				, &localized_char_traits::std_compare<wchar_t>
+			#if not BOOST_LIB_STD_DINKUMWARE
+		        , &localized_char_traits::std_compare<char16_t>
+	            , &localized_char_traits::std_compare<char32_t>
+			#endif
 			);
 		}
 	}
