@@ -145,8 +145,8 @@ namespace ext::natural_order
 			  &localized_char_traits::std_compare<char>
 			, &localized_char_traits::std_compare<wchar_t>
 		#if not BOOST_LIB_STD_DINKUMWARE
-	        , &localized_char_traits::std_compare<char16_t>
-            , &localized_char_traits::std_compare<char32_t>
+			, &localized_char_traits::std_compare<char16_t>
+			, &localized_char_traits::std_compare<char32_t>
 		#endif
 		);
 	}
@@ -160,19 +160,19 @@ namespace ext::natural_order
 				  &localized_char_traits::std_compare<char>
 				, &localized_char_traits::std_compare<wchar_t>
 			#if not BOOST_LIB_STD_DINKUMWARE
-		        , &localized_char_traits::std_compare<char16_t>
-	            , &localized_char_traits::std_compare<char32_t>
+				, &localized_char_traits::std_compare<char16_t>
+				, &localized_char_traits::std_compare<char32_t>
 			#endif
 			);
 		}
 		else
 		{
 			m_methods = std::make_tuple(
-				  &localized_char_traits::std_compare<char>
-				, &localized_char_traits::std_compare<wchar_t>
+				  &localized_char_traits::boost_compare<char>
+				, &localized_char_traits::boost_compare<wchar_t>
 			#if not BOOST_LIB_STD_DINKUMWARE
-		        , &localized_char_traits::std_compare<char16_t>
-	            , &localized_char_traits::std_compare<char32_t>
+				, &localized_char_traits::boost_compare<char16_t>
+				, &localized_char_traits::boost_compare<char32_t>
 			#endif
 			);
 		}
@@ -191,6 +191,16 @@ namespace ext::natural_order
 	{
 		using boost_collator_facet = boost::locale::collator<CharType>;
 		const auto & facet = std::use_facet<boost_collator_facet>(m_loc);
+		
+#if not defined NDEBUG
+		// boost::locale::collator and std::collate sort of share same id in locale facet database,
+		// so if std::collate is present - boost::locale::collator is present to, even if it's actually not.
+		// So we better check if it's really boost::locale::collator.
+		using std_collator_facet = std::collate<CharType>;
+		auto * std_collator = static_cast<const std_collator_facet *>(&facet);
+		assert(dynamic_cast<const boost_collator_facet *>(std_collator));
+#endif
+		
 		return facet.compare(m_compare_level, s1_first, s1_last, s2_first, s2_last);
 	}
 
