@@ -1,5 +1,5 @@
-#include <boost/predef.h>
-#if BOOST_OS_WINDOWS and not BOOST_PLAT_MINGW
+﻿#include <boost/predef.h>
+#if BOOST_OS_WINDOWS and BOOST_LIB_STD_DINKUMWARE
 
 #include <locale>
 #include <codecvt>
@@ -28,15 +28,13 @@ namespace
 	{
 		std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> utf8;
 		CodeCvtByName cp1251;
-		CodeCvtByName cp1252;
 
 		std::string martin_ru_utf8;
 		std::string martin_ru_cp1251;
 		std::wstring martin_ru;
 
 		CodecvtFixture()
-			: cp1251("ru_RU.cp1251"),
-			  cp1252("en_US.cp1252")
+			: cp1251(".1251")
 		{
 			ReadFiles();
 		}
@@ -67,6 +65,7 @@ BOOST_AUTO_TEST_CASE( BasicTest )
 	wstring wstr = L"Test Русский Текст Test";
 	wstring wstrRestored;
 	string str;
+
 	BOOST_CHECK_NO_THROW((ext::codecvt_convert::to_bytes(cp1251, wstr, str)));
 	BOOST_CHECK(str == "Test Русский Текст Test");
 	BOOST_CHECK_NO_THROW((ext::codecvt_convert::from_bytes(cp1251, str, wstrRestored)));
