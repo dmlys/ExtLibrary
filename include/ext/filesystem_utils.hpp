@@ -24,7 +24,7 @@ namespace ext
 	namespace filesystem_utils_detail
 	{
 #if BOOST_OS_WINDOWS
-		inline auto * to_utf8(const char * str)    { return str; }
+		inline auto * to_utf8(const char    * str) { return str; }
 		inline auto   to_utf8(const wchar_t * str) { return ext::codecvt_convert::to_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(str)); }
 #else
 		inline auto * to_utf8(const char * str)    { return str; }
