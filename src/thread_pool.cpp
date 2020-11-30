@@ -24,28 +24,30 @@ namespace ext
 
 	void thread_pool::delayed_task_continuation::continuate(shared_state_basic * caller) noexcept
 	{
-		auto owner = m_owner;
-		bool notify;
-
 		if (not mark_marked())
 			// thread_pool is destructed or destructing
 			return;
-
+			
 		// remove ourself from m_delayed and add m_task to thread_pool tasks list
 		{
-			std::lock_guard lk(owner->m_mutex);
+			std::lock_guard lk(m_owner->m_mutex);
 			
-			auto & list = owner->m_delayed;
-			auto & delayed_count = owner->m_delayed_count;
+			auto & list = m_owner->m_delayed;
+			auto & delayed_count = m_owner->m_delayed_count;
 			auto it = list.iterator_to(*this);
 			list.erase(it);
-
-			owner->m_tasks.push_back(*m_task.release());
-			notify = delayed_count == 0 || --delayed_count == 0;
+			
+			m_owner->m_tasks.push_back(*m_task.release());
+			bool notify = delayed_count == 0 || --delayed_count == 0;
+			
+			// Notify thread_pool if needed
+			// NOTE: Notify have to be done under lock,
+			//  otherwise this thread_pool object can be destroyed between release of mutex and notify_one call,
+			//  and m_owner becomes dangling pointer, and call to m_event.notify_one() is ill-formed.
+			//  While this situation is very rare - it can happen.
+			//  See clear method and destructor.
+			if (notify) m_owner->m_event.notify_one();
 		}
-		
-		// notify thread_pool if needed
-		if (notify) owner->m_event.notify_one();
 
 		// we were removed from m_delayed - intrusive list,
 		// which does not manage lifetime, decrement refcount
