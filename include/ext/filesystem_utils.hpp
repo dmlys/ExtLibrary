@@ -11,8 +11,8 @@
 #include <boost/predef.h>
 
 #if BOOST_OS_WINDOWS
-#include <ext/codecvt_conv/wincvt.hpp>
 #include <ext/codecvt_conv/generic_conv.hpp>
+#include <ext/codecvt_conv/wchar_cvt.hpp>
 #endif
 
 #include <ext/range.hpp>
@@ -25,7 +25,7 @@ namespace ext
 	{
 #if BOOST_OS_WINDOWS
 		inline auto * to_utf8(const char    * str) { return str; }
-		inline auto   to_utf8(const wchar_t * str) { return ext::codecvt_convert::to_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(str)); }
+		inline auto   to_utf8(const wchar_t * str) { return ext::codecvt_convert::wchar_cvt::to_utf8(str); }
 #else
 		inline auto * to_utf8(const char * str)    { return str; }
 #endif
@@ -155,7 +155,7 @@ namespace ext
 	bool read_file(const char * path, Container & content, std::ostream & reps,
 	               std::ios_base::openmode mode = std::ios_base::in /*| std::ios_base::text*/)
 	{
-		std::wstring wstr = ext::codecvt_convert::from_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(path));
+		std::wstring wstr = ext::codecvt_convert::wchar_cvt::to_wchar(path);
 		return read_file(wstr.c_str(), content, reps, mode);
 	}
 
@@ -163,7 +163,7 @@ namespace ext
 	bool write_file(const char * path, const Container & content, std::ostream & resp,
 	                std::ios_base::openmode mode = std::ios_base::out /*| std::ios_base::text*/)
 	{
-		std::wstring wstr = ext::codecvt_convert::from_bytes(ext::codecvt_convert::wincvt::u8_cvt, ext::str_view(path));
+		std::wstring wstr = ext::codecvt_convert::wchar_cvt::to_wchar(path);
 		return write_file(wstr.c_str(), content, resp, mode);
 	}
 #endif

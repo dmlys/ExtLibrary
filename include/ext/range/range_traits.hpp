@@ -3,6 +3,10 @@
 
 #include <boost/predef.h>
 #include <boost/range.hpp>
+// as_literal includes boost/range/detail/str_types.hpp
+// and adds support for boost::range_value for "char *" like ranges
+// boost/range.hpp does not include this header, but overral it's usefull
+#include <boost/range/as_literal.hpp>
 
 namespace ext
 {

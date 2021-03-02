@@ -5,8 +5,8 @@
 #include <openssl/dh.h>
 #include <openssl/pkcs12.h>
 
-#include <codecvt>
-#include <ext/codecvt_conv.hpp>
+#include <ext/codecvt_conv/generic_conv.hpp>
+#include <ext/codecvt_conv/wchar_cvt.hpp>
 
 #include <boost/predef.h> // for BOOST_OS_WINDOWS
 #include <boost/static_assert.hpp>
@@ -41,12 +41,6 @@ void intrusive_ptr_release(SSL * ptr) { return ::SSL_free(ptr);   }
 
 int  intrusive_ptr_add_ref(SSL_CTX * ptr) { return ::SSL_CTX_up_ref(ptr); }
 void intrusive_ptr_release(SSL_CTX * ptr) { return ::SSL_CTX_free(ptr);   }
-
-#if BOOST_OS_WINDOWS
-static const std::codecvt_utf8_utf16<wchar_t, 0x10FFFF, std::codecvt_mode::little_endian> u8_cvt;
-#else
-static const std::codecvt_utf8<wchar_t, 0x10ffff, std::codecvt_mode::little_endian> u8_cvt;
-#endif
 
 
 
@@ -325,7 +319,7 @@ namespace ext::openssl
 	x509_iptr load_certificate_from_file(const char * path, std::string_view passwd)
 	{
 #if BOOST_OS_WINDOWS
-		auto wpath = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		auto wpath = ext::codecvt_convert::wchar_cvt::to_wchar(path);
 		std::FILE * fp = ::_wfopen(wpath.c_str(), L"r");
 #else
 		std::FILE * fp = std::fopen(path, "r");
@@ -346,7 +340,7 @@ namespace ext::openssl
 	x509_iptr load_certificate_from_file(const wchar_t * wpath, std::string_view passwd)
 	{
 #if not BOOST_OS_WINDOWS
-		auto path = ext::codecvt_convert::to_bytes(u8_cvt, ext::str_view(wpath));
+		auto path = ext::codecvt_convert::wchar_cvt::to_utf8(wpath);
 		std::FILE * fp = std::fopen(path.c_str(), "r");
 #else
 		std::FILE * fp = ::_wfopen(wpath, L"r");
@@ -377,7 +371,7 @@ namespace ext::openssl
 	evp_pkey_iptr load_private_key_from_file(const char * path, std::string_view passwd)
 	{
 #if BOOST_OS_WINDOWS
-		auto wpath = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		auto wpath = ext::codecvt_convert::wchar_cvt::to_wchar(path);
 		std::FILE * fp = ::_wfopen(wpath.c_str(), L"r");
 #else
 		std::FILE * fp = std::fopen(path, "r");
@@ -400,7 +394,7 @@ namespace ext::openssl
 	evp_pkey_iptr load_private_key_from_file(const wchar_t * wpath, std::string_view passwd)
 	{
 #if not BOOST_OS_WINDOWS
-		auto path = ext::codecvt_convert::to_bytes(u8_cvt, ext::str_view(wpath));
+		auto path = ext::codecvt_convert::wchar_cvt::to_utf8(wpath);
 		std::FILE * fp = std::fopen(path.c_str(), "r");
 #else
 		std::FILE * fp = ::_wfopen(wpath, L"r");
@@ -443,7 +437,7 @@ namespace ext::openssl
 	pkcs12_uptr load_pkcs12_from_file(const char * path)
 	{
 #if BOOST_OS_WINDOWS
-		auto wpath = ext::codecvt_convert::from_bytes(u8_cvt, ext::str_view(path));
+		auto wpath = ext::codecvt_convert::wchar_cvt::to_wchar(path);
 		std::FILE * fp = ::_wfopen(wpath.c_str(), L"r");
 #else
 		std::FILE * fp = std::fopen(path, "r");
@@ -465,7 +459,7 @@ namespace ext::openssl
 	pkcs12_uptr load_pkcs12_from_file(const wchar_t * wpath)
 	{
 #if not BOOST_OS_WINDOWS
-		auto path = ext::codecvt_convert::to_bytes(u8_cvt, ext::str_view(wpath));
+		auto path = ext::codecvt_convert::wchar_cvt::to_utf8(wpath);
 		std::FILE * fp = std::fopen(path.c_str(), "r");
 #else
 		std::FILE * fp = ::_wfopen(wpath, L"r");
