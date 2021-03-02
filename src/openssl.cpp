@@ -12,6 +12,9 @@
 #include <boost/static_assert.hpp>
 
 #include <ext/openssl.hpp>
+#include <ext/time_fmt.hpp>
+
+#include <cstring> // for std::memset
 
 #if BOOST_OS_WINDOWS
 #include <winsock2.h> // winsock2.h should be included before windows.h
@@ -43,6 +46,9 @@ int  intrusive_ptr_add_ref(SSL_CTX * ptr) { return ::SSL_CTX_up_ref(ptr); }
 void intrusive_ptr_release(SSL_CTX * ptr) { return ::SSL_CTX_free(ptr);   }
 
 
+#if OPENSSL_VERSION_NUMBER < 0x10101000L
+static int ASN1_TIME_to_tm(const ::ASN1_TIME * time, std::tm * tm);
+#endif
 
 
 namespace ext::openssl
@@ -280,6 +286,90 @@ namespace ext::openssl
 		::PKCS12_free(pkcs12);
 	}
 
+	/************************************************************************/
+	/*                  print helpers                                       */
+	/************************************************************************/
+	std::string x509_name_string(const ::X509_NAME * name, int flags)
+	{
+		ext::openssl::bio_uptr mem_bio(::BIO_new(::BIO_s_mem()));
+		// XN_FLAG_DN_REV - for XML DSIG, names subject and issuers should be in reversed order
+		if (-1 == ::X509_NAME_print_ex(mem_bio.get(), name, 0, flags))
+			ext::openssl::throw_last_error("::X509_NAME_print_ex failed");
+
+		char * data;
+		int len = BIO_get_mem_data(mem_bio.get(), &data);
+		return std::string(data, len);
+	}
+	
+	std::string x509_name_string(const ::X509_NAME * name)
+	{
+		constexpr int flags = (XN_FLAG_RFC2253 | XN_FLAG_SEP_CPLUS_SPC) & ~XN_FLAG_SEP_COMMA_PLUS & ~ASN1_STRFLGS_ESC_MSB;
+		return x509_name_string(name, flags);
+	}
+	
+	std::string x509_name_reversed_string(const ::X509_NAME * name)
+	{
+		// XN_FLAG_DN_REV - for XML DSIG, names subject and issuers should be in reversed order
+		constexpr int flags = (XN_FLAG_RFC2253 | XN_FLAG_DN_REV | XN_FLAG_SEP_CPLUS_SPC) & ~XN_FLAG_SEP_COMMA_PLUS & ~ASN1_STRFLGS_ESC_MSB;
+		return x509_name_string(name, flags);
+	}
+	
+	std::string bignum_string(const ::BIGNUM * num)
+	{
+		auto * str = ::BN_bn2dec(num);
+		std::string result = str;
+		::OPENSSL_free(str);
+		return result;
+	}
+	
+	std::string asn1_integer_string(const ::ASN1_INTEGER * integer)
+	{
+		auto * bn = ::ASN1_INTEGER_to_BN(integer, nullptr);
+		auto result = bignum_string(bn);
+		::BN_free(bn);
+
+		return result;
+	}
+	
+	std::string asn1_time_string(const ::ASN1_TIME * time)
+	{
+		constexpr unsigned buffsize = 128;
+		char buffer[buffsize];
+		auto t = asn1_time_timet(time);
+		
+		std::tm tm;
+		ext::localtime(&t, &tm);
+		auto written = std::strftime(buffer, buffsize, "%c", &tm);
+		return std::string(buffer, written);
+	}
+	
+	std::string asn1_time_print(const ::ASN1_TIME * time)
+	{
+		ext::openssl::bio_uptr mem_bio(::BIO_new(::BIO_s_mem()));
+		if (1 != ::ASN1_TIME_print(mem_bio.get(), time))
+			ext::openssl::throw_last_error("::ASN1_TIME_print failed");
+		
+		char * data;
+		int len = BIO_get_mem_data(mem_bio.get(), &data);
+		return std::string(data, len);
+	}
+		
+	std::tm asn1_time_tm(const ::ASN1_TIME * time)
+	{
+		std::tm tm;
+		if (1 != ::ASN1_TIME_to_tm(time, &tm))
+			ext::openssl::throw_last_error("::ASN1_TIME_to_tm failed");
+		
+		return tm;
+	}
+	
+	time_t asn1_time_timet(const ::ASN1_TIME * time)
+	{
+		// TODO: handle special case 99991231235959Z
+		auto tm = asn1_time_tm(time);
+		return ext::mkgmtime(&tm);
+	}
+	
 	/************************************************************************/
 	/*                  utility stuff                                       */
 	/************************************************************************/
@@ -548,5 +638,54 @@ namespace ext::openssl
 		return ssl_ctx_iptr;
 	}
 }
+
+static unsigned double_digits_to_uint(const char *& str)
+{
+	unsigned n = 10 * (*str++ - '0');
+	return n + (*str++ - '0');
+}
+
+#if OPENSSL_VERSION_NUMBER < 0x10101000L
+static int ASN1_TIME_to_tm(const ::ASN1_TIME * time, std::tm * tm)
+{
+	if (not time) return -1;
+	const char * str = reinterpret_cast<const char*>(time->data);
+	if (not str) return -1;
+	
+	unsigned year, month, day, hour, min, sec;
+	switch(time->type) {
+		// https://tools.ietf.org/html/rfc5280#section-4.1.2.5.1
+		case V_ASN1_UTCTIME: // YYMMDDHHMMSSZ
+			year = double_digits_to_uint(str);
+			year += year < 50 ? 2000 : 1900;
+			break;
+		case V_ASN1_GENERALIZEDTIME: // YYYYMMDDHHMMSSZ
+			year  = 100 * double_digits_to_uint(str);
+			year +=       double_digits_to_uint(str);
+			break;
+		default: return -1; // error
+	}
+	
+	month = double_digits_to_uint(str);
+	day   = double_digits_to_uint(str);
+	hour  = double_digits_to_uint(str);
+	min   = double_digits_to_uint(str);
+	sec   = double_digits_to_uint(str);
+	if (*str != 'Z') return -1;
+	
+	if (year == 9999 && month == 12 && day == 31 && hour == 23 && min == 59 && sec == 59) // 99991231235959Z rfc 5280
+		return -1;
+	
+	std::memset(tm, 0, sizeof(*tm));
+	tm->tm_year = year - 1900;
+	tm->tm_mon  = month;
+	tm->tm_mday = day;
+	tm->tm_hour = hour;
+	tm->tm_min  = min;
+	tm->tm_sec  = sec;
+	
+	return 1;
+}
+#endif
 
 #endif // #ifdef EXT_ENABLE_OPENSSL

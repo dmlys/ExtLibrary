@@ -1,5 +1,6 @@
 #pragma once
 #ifdef EXT_ENABLE_OPENSSL
+#include <ctime>
 #include <memory>
 #include <tuple>
 #include <ostream>
@@ -9,17 +10,17 @@
 #include <ext/intrusive_ptr.hpp>
 
 // forward some openssl types
-struct bio_st;
-struct x509_st;
-struct rsa_st;
-struct evp_pkey_st;
-struct PKCS12_st;
+typedef struct asn1_string_st ASN1_INTEGER;
+typedef struct asn1_string_st ASN1_TIME;
 
-typedef bio_st           BIO;
-typedef x509_st          X509;
-typedef rsa_st           RSA;
-typedef evp_pkey_st      EVP_PKEY;
-typedef PKCS12_st        PKCS12;
+
+typedef struct bignum_st        BIGNUM;
+typedef struct bio_st           BIO;
+typedef struct X509_name_st     X509_NAME;
+typedef struct x509_st          X509;
+typedef struct rsa_st           RSA;
+typedef struct evp_pkey_st      EVP_PKEY;
+typedef struct PKCS12_st        PKCS12;
 
 struct stack_st_X509;
 
@@ -166,6 +167,39 @@ namespace ext::openssl
 	using rsa_iptr      = ext::intrusive_ptr<RSA>;
 	using evp_pkey_iptr = ext::intrusive_ptr<EVP_PKEY>;
 
+	// various openssl print helpers
+	/// prints name with X509_NAME_print_ex and given flags
+	std::string x509_name_string(const ::X509_NAME * name, int flags);
+	/// prints name with X509_NAME_print_ex and flags:
+	///  (XN_FLAG_RFC2253 | XN_FLAG_SEP_CPLUS_SPC) & ~XN_FLAG_SEP_COMMA_PLUS & ~ASN1_STRFLGS_ESC_MSB 
+	std::string x509_name_string(const ::X509_NAME * name);
+	/// prints name with X509_NAME_print_ex and flags:
+	///  (XN_FLAG_DN_REV | XN_FLAG_RFC2253 | XN_FLAG_SEP_CPLUS_SPC) & ~XN_FLAG_SEP_COMMA_PLUS & ~ASN1_STRFLGS_ESC_MSB;
+	std::string x509_name_reversed_string(const ::X509_NAME * name);
+	
+	/// prints num via BN_bn2dec
+	std::string bignum_string(const ::BIGNUM * num);
+	/// converts asn1 integer to bignum and prints it
+	std::string asn1_integer_string(const ::ASN1_INTEGER * integer);
+	/// converts asn1 time to time_t, then prints via std::strftime(..., "%c", ...)
+	/// %c - locale specific standard date and time string
+	/// see also asn1_time_print, asn1_time_timet
+	std::string asn1_time_string(const ::ASN1_TIME * time);
+
+	/// Converts time to time_t type, with help of asn1_time_tm and std::mkgmtime(or platform alternative)
+	/// returns -1 for special invalid date value
+	/// SOME REMARKS:	
+	///  ASN1_TIME - just a ASN1_STRING, which holds date as string constrained by RFC 5280
+	///  by that RFC date/time should stored in:
+	///   * UTCTime: date string in format YYMMDDHHMMSSZ, GMT timezone only
+	///   * GeneralizedTime: date string YYYYMMDDHHMMSSZ, GMT timezone only
+	///  NOTE: special value 99991231235959Z means invalid date
+	time_t asn1_time_timet(const ::ASN1_TIME * time);
+	/// ASN1_TIME_to_tm wrapper
+	std::tm asn1_time_tm(const ::ASN1_TIME * time);
+	/// ASN1_TIME_print wrapper
+	std::string asn1_time_print(const ::ASN1_TIME * time);
+	
 
 	/// Loads X509 certificate from given memory location and with optional password(password probably will never be used.
 	/// Throws std::system_error in case of errors
